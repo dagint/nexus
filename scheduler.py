@@ -33,8 +33,15 @@ def init_scheduler(app):
         id="cleanup",
         replace_existing=True,
     )
+    scheduler.add_job(
+        func=lambda: _check_follow_ups(app),
+        trigger="interval",
+        hours=24,
+        id="check_follow_ups",
+        replace_existing=True,
+    )
     scheduler.start()
-    logger.info("Scheduler started - checking alerts every hour")
+    logger.info("Scheduler started - checking alerts every hour, follow-ups daily")
 
 
 def _cleanup(app):
@@ -46,6 +53,96 @@ def _cleanup(app):
             logger.info("Cleanup completed")
         except Exception as e:
             logger.error("Cleanup failed: %s", e)
+
+
+def _check_follow_ups(app):
+    """Check for due follow-ups and create in-app notifications."""
+    with app.app_context():
+        try:
+            from database import get_due_follow_ups, create_notification
+
+            due = get_due_follow_ups(days_ahead=0)  # Overdue and due today
+            today = datetime.utcnow().strftime("%Y-%m-%d")
+
+            # Group by user
+            user_followups = defaultdict(list)
+            for row in due:
+                user_followups[row["user_id"]].append(row)
+
+            for user_id, followups in user_followups.items():
+                for fu in followups:
+                    is_overdue = fu["follow_up_date"] < today
+                    prefix = "OVERDUE" if is_overdue else "Due today"
+                    message = f"{prefix}: Follow up on {fu['title']} at {fu['company']} (scheduled {fu['follow_up_date']})"
+                    create_notification(
+                        user_id,
+                        message=message,
+                        link="/pipeline",
+                    )
+
+                # Optionally send email if SMTP configured
+                if followups:
+                    _send_follow_up_email(followups[0]["email"], followups, app)
+
+            if due:
+                logger.info("Created follow-up notifications for %d users", len(user_followups))
+        except Exception as e:
+            logger.error("Follow-up check failed: %s", e)
+
+
+def _send_follow_up_email(email, followups, app):
+    """Send an email reminder for due follow-ups (best-effort)."""
+    try:
+        from services.notifier import _smtp_configured, _send_email
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        from html import escape
+        from config import Config
+
+        if not _smtp_configured():
+            return
+
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        parts = []
+        for fu in followups[:10]:
+            is_overdue = fu["follow_up_date"] < today
+            status = '<span style="color:red;font-weight:bold">OVERDUE</span>' if is_overdue else '<span style="color:orange">Due Today</span>'
+            parts.append(f"""
+            <tr>
+                <td style="padding:8px;border-bottom:1px solid #eee">
+                    {status}<br>
+                    <strong>{escape(fu.get('title', ''))}</strong> at {escape(fu.get('company', ''))}<br>
+                    <small>Follow-up scheduled: {escape(fu.get('follow_up_date', ''))}</small>
+                </td>
+            </tr>""")
+
+        rows = "".join(parts)
+        html = f"""
+        <html><head><style>
+        @media (prefers-color-scheme: dark) {{
+            body {{ background-color: #1a1a2e !important; color: #e0e0e0 !important; }}
+            h2 {{ color: #e0e0e0 !important; }}
+            td {{ border-bottom-color: #2a2a4a !important; }}
+        }}
+        </style></head>
+        <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background-color:#ffffff;color:#333333">
+        <h2>Follow-up Reminder: {len(followups)} application(s)</h2>
+        <p>The following applications need follow-up:</p>
+        <table style="width:100%;border-collapse:collapse">{rows}</table>
+        <p><a href="#" style="color:#007bff">Go to Pipeline</a></p>
+        <hr><p style="color:#999;font-size:12px">Sent by Nexus</p>
+        </body></html>"""
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"Follow-up Reminder: {len(followups)} application(s) need attention"
+        msg["From"] = Config.SMTP_FROM
+        msg["To"] = email
+        msg.attach(MIMEText(html, "html"))
+        _send_email(msg)
+        logger.info("Sent follow-up reminder to %s for %d items", email, len(followups))
+
+    except Exception as e:
+        logger.warning("Failed to send follow-up email to %s: %s", email, e)
 
 
 def _check_alerts(app):
@@ -145,6 +242,29 @@ def _check_alerts(app):
 
                 except Exception as e:
                     logger.error("Alert check failed for search %s: %s", search["id"], e)
+
+            # Trigger webhooks for new matches (fire-and-forget)
+            if all_new_jobs:
+                try:
+                    from services.webhook_sender import trigger_webhooks
+                    webhook_payload = {
+                        "user_id": user_id,
+                        "new_job_count": len(all_new_jobs),
+                        "jobs": [
+                            {
+                                "title": j.get("title", ""),
+                                "company": j.get("company", ""),
+                                "location": j.get("location", ""),
+                                "apply_url": j.get("apply_url", ""),
+                                "match_score": j.get("match_score"),
+                                "source": j.get("source", ""),
+                            }
+                            for j in all_new_jobs[:20]  # Limit payload size
+                        ],
+                    }
+                    trigger_webhooks(user_id, "new_matches", webhook_payload)
+                except Exception as e:
+                    logger.warning("Failed to trigger webhooks for user %d: %s", user_id, e)
 
             # Send one consolidated digest for this user
             if all_new_jobs:

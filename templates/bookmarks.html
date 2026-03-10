@@ -3,7 +3,12 @@
 {% block title %}Bookmarked Jobs{% endblock %}
 
 {% block content %}
-<h2 class="mb-4">Bookmarked Jobs</h2>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Bookmarked Jobs</h2>
+    <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#importCsvModal">
+        Import CSV
+    </button>
+</div>
 
 {% if jobs %}
 {% for job in jobs %}
@@ -38,10 +43,11 @@
         <p class="small text-muted mb-2">{{ job.description[:300] }}{% if job.description|length > 300 %}...{% endif %}</p>
         {% endif %}
 
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 flex-wrap">
             {% if job.apply_url %}
             <a href="{{ job.apply_url }}" target="_blank" class="btn btn-sm btn-primary">Apply</a>
             {% endif %}
+            <a href="{{ url_for('job_detail', job_key=job.job_key) }}" class="btn btn-sm btn-outline-info">View Details</a>
             {% if job.job_key not in applied_keys %}
             <button class="btn btn-sm btn-outline-success apply-from-bookmark" data-job-key="{{ job.job_key }}"
                     data-title="{{ job.title }}" data-company="{{ job.company }}">Mark Applied</button>
@@ -56,20 +62,46 @@
 {% else %}
 <p class="text-muted">No bookmarked jobs. Bookmark jobs from search results to save them here.</p>
 {% endif %}
+
+<!-- Import CSV Modal -->
+<div class="modal fade" id="importCsvModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Import Jobs from CSV</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('import_csv_route') }}" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <p class="text-muted small">Upload a CSV file with job listings. Required column: <code>title</code>. Optional columns: <code>company</code>, <code>location</code>, <code>apply_url</code>, <code>salary_min</code>, <code>salary_max</code>, <code>description</code>, <code>remote_status</code>, <code>source</code>.</p>
+                    <div class="mb-3">
+                        <label for="csvFile" class="form-label">CSV File</label>
+                        <input type="file" class="form-control" id="csvFile" name="csv_file" accept=".csv" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Import</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
 document.querySelectorAll('.unbookmark-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
-        fetch('/jobs/' + this.dataset.jobKey + '/bookmark', {method: 'DELETE'})
+        csrfFetch('/jobs/' + this.dataset.jobKey + '/bookmark', {method: 'DELETE'})
             .then(function() { location.reload(); });
     });
 });
 
 document.querySelectorAll('.apply-from-bookmark').forEach(function(btn) {
     btn.addEventListener('click', function() {
-        fetch('/jobs/' + this.dataset.jobKey + '/applied', {
+        csrfFetch('/jobs/' + this.dataset.jobKey + '/applied', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({title: this.dataset.title, company: this.dataset.company})

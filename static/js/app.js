@@ -712,6 +712,367 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+    // --- Tailor Resume (from results cards) ---
+    document.querySelectorAll(".tailor-resume-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            var title = this.dataset.title || "";
+            var company = this.dataset.company || "";
+            var description = this.dataset.description || "";
+            var originalText = this.textContent;
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>...';
+
+            csrfFetch("/jobs/tailor-resume", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: title, company: company, description: description }),
+            })
+                .then(function (resp) {
+                    return resp.json().then(function (data) {
+                        return { ok: resp.ok, data: data };
+                    });
+                })
+                .then(function (result) {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+
+                    if (!result.ok) {
+                        alert(result.data.error || "Failed to generate suggestions.");
+                        return;
+                    }
+
+                    var d = result.data;
+                    var html = "";
+
+                    if (d.summary_suggestion) {
+                        html += '<div class="card mb-3"><div class="card-header"><strong>Suggested Summary</strong></div>';
+                        html += '<div class="card-body"><p>' + d.summary_suggestion + '</p></div></div>';
+                    }
+                    if (d.keywords_to_add && d.keywords_to_add.length) {
+                        html += '<div class="card mb-3"><div class="card-header"><strong>Keywords to Add</strong></div>';
+                        html += '<div class="card-body"><div class="d-flex flex-wrap gap-1">';
+                        d.keywords_to_add.forEach(function(k) { html += '<span class="badge bg-danger">' + k + '</span>'; });
+                        html += '</div></div></div>';
+                    }
+                    if (d.skills_to_highlight && d.skills_to_highlight.length) {
+                        html += '<div class="card mb-3"><div class="card-header"><strong>Skills to Highlight</strong></div>';
+                        html += '<div class="card-body"><div class="d-flex flex-wrap gap-1">';
+                        d.skills_to_highlight.forEach(function(s) { html += '<span class="badge bg-success">' + s + '</span>'; });
+                        html += '</div></div></div>';
+                    }
+                    if (d.reworded_bullets && d.reworded_bullets.length) {
+                        html += '<div class="card mb-3"><div class="card-header"><strong>Reworded Bullets</strong></div><div class="card-body">';
+                        d.reworded_bullets.forEach(function(b) {
+                            if (b.original) html += '<p class="small text-muted mb-1"><del>' + b.original + '</del></p>';
+                            html += '<p class="mb-2">' + b.suggested + '</p>';
+                        });
+                        html += '</div></div>';
+                    }
+                    if (!html) html = '<p class="text-muted">No specific suggestions generated.</p>';
+
+                    // Use tailorResumeModal if it exists (job_detail), otherwise coverLetterModal as fallback
+                    var modalEl = document.getElementById("tailorResumeModal");
+                    if (modalEl) {
+                        document.getElementById("tailorResumeContent").innerHTML = html;
+                        var modal = new bootstrap.Modal(modalEl);
+                        modal.show();
+                    } else {
+                        document.getElementById("coverLetterContent").innerHTML = html;
+                        var modal = new bootstrap.Modal(document.getElementById("coverLetterModal"));
+                        document.querySelector("#coverLetterModal .modal-title").textContent = "Tailored Resume Suggestions";
+                        modal.show();
+                    }
+                })
+                .catch(function (err) {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                    alert("Error: " + err.message);
+                });
+        });
+    });
+
+    // --- Copy Tailor Results ---
+    var copyTailorBtn = document.getElementById("copyTailorResults");
+    if (copyTailorBtn) {
+        copyTailorBtn.addEventListener("click", function () {
+            var content = document.getElementById("tailorResumeContent").innerText;
+            navigator.clipboard.writeText(content).then(function () {
+                copyTailorBtn.textContent = "Copied!";
+                setTimeout(function () { copyTailorBtn.textContent = "Copy All"; }, 2000);
+            });
+        });
+    }
+
+    // --- LinkedIn Helper ---
+    document.querySelectorAll(".linkedin-helper-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            var title = this.dataset.title || "";
+            var company = this.dataset.company || "";
+            var originalText = this.textContent;
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>...';
+
+            var contentEl = document.getElementById("linkedinHelperContent");
+            contentEl.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm"></span> Generating...</div>';
+            var modal = new bootstrap.Modal(document.getElementById("linkedinHelperModal"));
+            modal.show();
+
+            csrfFetch("/jobs/linkedin-note", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: title, company: company }),
+            })
+                .then(function (resp) { return resp.json(); })
+                .then(function (data) {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+
+                    var html = '';
+
+                    // Connection note
+                    html += '<div class="card mb-3"><div class="card-header d-flex justify-content-between align-items-center">';
+                    html += '<strong>Connection Request Note</strong>';
+                    html += '<button class="btn btn-sm btn-outline-secondary copy-text-btn" data-target="linkedinNote">Copy</button>';
+                    html += '</div><div class="card-body"><p id="linkedinNote" class="mb-0">' + (data.connection_note || '') + '</p>';
+                    html += '<small class="text-muted">' + (data.connection_note || '').length + '/300 characters</small>';
+                    html += '</div></div>';
+
+                    // InMail message
+                    html += '<div class="card mb-3"><div class="card-header d-flex justify-content-between align-items-center">';
+                    html += '<strong>InMail / Message Template</strong>';
+                    html += '<button class="btn btn-sm btn-outline-secondary copy-text-btn" data-target="linkedinMessage">Copy</button>';
+                    html += '</div><div class="card-body"><p id="linkedinMessage" style="white-space:pre-wrap" class="mb-0">' + (data.inmail_message || '') + '</p>';
+                    html += '</div></div>';
+
+                    // Search URLs
+                    if (data.search_urls) {
+                        html += '<div class="card mb-3"><div class="card-header"><strong>Find People at ' + company + '</strong></div>';
+                        html += '<div class="card-body">';
+                        html += '<a href="' + (data.search_urls.company_people || '#') + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary me-2 mb-2">Company People</a>';
+                        html += '<a href="' + (data.search_urls.recruiters || '#') + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary me-2 mb-2">Recruiters</a>';
+                        html += '<a href="' + (data.search_urls.hiring_managers || '#') + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary me-2 mb-2">Hiring Managers</a>';
+                        html += '<a href="' + (data.search_urls.company_page || '#') + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary mb-2">Company Page</a>';
+                        html += '</div></div>';
+                    }
+
+                    contentEl.innerHTML = html;
+
+                    // Bind copy buttons
+                    contentEl.querySelectorAll(".copy-text-btn").forEach(function(copyBtn) {
+                        copyBtn.addEventListener("click", function() {
+                            var target = document.getElementById(this.dataset.target);
+                            if (target) {
+                                navigator.clipboard.writeText(target.textContent).then(function() {
+                                    copyBtn.textContent = "Copied!";
+                                    setTimeout(function() { copyBtn.textContent = "Copy"; }, 2000);
+                                });
+                            }
+                        });
+                    });
+                })
+                .catch(function (err) {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                    contentEl.innerHTML = '<div class="alert alert-danger">Error: ' + err.message + '</div>';
+                });
+        });
+    });
+
+    // --- Networking Tips ---
+    document.querySelectorAll(".networking-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            var title = this.dataset.title || "";
+            var company = this.dataset.company || "";
+            var description = this.dataset.description || "";
+            var originalText = this.textContent;
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>...';
+
+            var contentEl = document.getElementById("networkingContent");
+            contentEl.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm"></span> Generating advice...</div>';
+            var modal = new bootstrap.Modal(document.getElementById("networkingModal"));
+            modal.show();
+
+            csrfFetch("/jobs/networking-advice", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: title, company: company, description: description }),
+            })
+                .then(function (resp) { return resp.json(); })
+                .then(function (data) {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+
+                    var html = '';
+
+                    // Who to connect with
+                    if (data.who_to_connect_with && data.who_to_connect_with.length) {
+                        html += '<div class="card mb-3"><div class="card-header"><strong>Who to Connect With</strong></div>';
+                        html += '<ul class="list-group list-group-flush">';
+                        data.who_to_connect_with.forEach(function(w) {
+                            html += '<li class="list-group-item">' + w + '</li>';
+                        });
+                        html += '</ul></div>';
+                    }
+
+                    // Conversation starters
+                    if (data.conversation_starters && data.conversation_starters.length) {
+                        html += '<div class="card mb-3"><div class="card-header"><strong>Conversation Starters</strong></div>';
+                        html += '<ul class="list-group list-group-flush">';
+                        data.conversation_starters.forEach(function(c) {
+                            html += '<li class="list-group-item small">' + c + '</li>';
+                        });
+                        html += '</ul></div>';
+                    }
+
+                    // LinkedIn groups
+                    if (data.linkedin_groups && data.linkedin_groups.length) {
+                        html += '<div class="card mb-3"><div class="card-header"><strong>Groups &amp; Communities</strong></div>';
+                        html += '<ul class="list-group list-group-flush">';
+                        data.linkedin_groups.forEach(function(g) {
+                            html += '<li class="list-group-item small">' + g + '</li>';
+                        });
+                        html += '</ul></div>';
+                    }
+
+                    // Events
+                    if (data.events_to_attend && data.events_to_attend.length) {
+                        html += '<div class="card mb-3"><div class="card-header"><strong>Events to Attend</strong></div>';
+                        html += '<ul class="list-group list-group-flush">';
+                        data.events_to_attend.forEach(function(e) {
+                            html += '<li class="list-group-item small">' + e + '</li>';
+                        });
+                        html += '</ul></div>';
+                    }
+
+                    // Email templates
+                    if (data.email_templates && data.email_templates.length) {
+                        html += '<div class="card mb-3"><div class="card-header"><strong>Email Templates</strong></div>';
+                        html += '<div class="card-body">';
+                        data.email_templates.forEach(function(tmpl, i) {
+                            html += '<div class="mb-3' + (i > 0 ? ' border-top pt-3' : '') + '">';
+                            html += '<p class="fw-bold mb-1">Subject: ' + (tmpl.subject || '') + '</p>';
+                            html += '<p class="small mb-1" style="white-space:pre-wrap">' + (tmpl.body || '') + '</p>';
+                            html += '<button class="btn btn-sm btn-outline-secondary copy-email-btn" data-idx="' + i + '">Copy</button>';
+                            html += '</div>';
+                        });
+                        html += '</div></div>';
+                    }
+
+                    if (!html) html = '<p class="text-muted">No networking suggestions available.</p>';
+                    contentEl.innerHTML = html;
+
+                    // Copy email buttons
+                    contentEl.querySelectorAll(".copy-email-btn").forEach(function(copyBtn) {
+                        copyBtn.addEventListener("click", function() {
+                            var idx = parseInt(this.dataset.idx);
+                            var tmpl = data.email_templates[idx];
+                            var text = "Subject: " + (tmpl.subject || "") + "\n\n" + (tmpl.body || "");
+                            navigator.clipboard.writeText(text).then(function() {
+                                copyBtn.textContent = "Copied!";
+                                setTimeout(function() { copyBtn.textContent = "Copy"; }, 2000);
+                            });
+                        });
+                    });
+                })
+                .catch(function (err) {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                    contentEl.innerHTML = '<div class="alert alert-danger">Error: ' + err.message + '</div>';
+                });
+        });
+    });
+
+    // Copy all networking tips
+    var copyNetBtn = document.getElementById("copyNetworkingTips");
+    if (copyNetBtn) {
+        copyNetBtn.addEventListener("click", function () {
+            var content = document.getElementById("networkingContent").innerText;
+            navigator.clipboard.writeText(content).then(function () {
+                copyNetBtn.textContent = "Copied!";
+                setTimeout(function () { copyNetBtn.textContent = "Copy All"; }, 2000);
+            });
+        });
+    }
+
+    // --- Bulk Actions ---
+    var selectAll = document.getElementById("selectAllJobs");
+    if (selectAll) {
+        selectAll.addEventListener("change", function () {
+            var checks = document.querySelectorAll(".bulk-select-check");
+            var checked = this.checked;
+            checks.forEach(function (cb) {
+                // Only select visible (non-hidden) jobs
+                var card = cb.closest(".job-card");
+                if (card && !card.classList.contains("hidden")) {
+                    cb.checked = checked;
+                }
+            });
+            updateCompareBar();
+        });
+    }
+
+    function getSelectedJobs() {
+        var jobs = [];
+        document.querySelectorAll(".bulk-select-check:checked").forEach(function (cb) {
+            jobs.push({
+                job_key: cb.dataset.jobKey || "",
+                title: cb.dataset.title || "",
+                company: cb.dataset.company || "",
+                location: cb.dataset.location || "",
+                apply_url: cb.dataset.applyUrl || "",
+            });
+        });
+        return jobs;
+    }
+
+    function bulkAction(url, successMsg) {
+        var jobs = getSelectedJobs();
+        if (jobs.length === 0) return;
+
+        csrfFetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ jobs: jobs }),
+        })
+            .then(function (resp) { return resp.json(); })
+            .then(function (data) {
+                if (data.status === "ok") {
+                    alert(successMsg + " (" + data.count + " jobs)");
+                    location.reload();
+                } else {
+                    alert(data.error || "Action failed.");
+                }
+            })
+            .catch(function (err) {
+                alert("Error: " + err.message);
+            });
+    }
+
+    var bulkBookmarkBtn = document.getElementById("bulkBookmarkBtn");
+    if (bulkBookmarkBtn) {
+        bulkBookmarkBtn.addEventListener("click", function () {
+            bulkAction("/jobs/bulk/bookmark", "Bookmarked");
+        });
+    }
+
+    var bulkApplyBtn = document.getElementById("bulkApplyBtn");
+    if (bulkApplyBtn) {
+        bulkApplyBtn.addEventListener("click", function () {
+            bulkAction("/jobs/bulk/apply", "Marked as applied");
+        });
+    }
+
+    var bulkDismissBtn = document.getElementById("bulkDismissBtn");
+    if (bulkDismissBtn) {
+        bulkDismissBtn.addEventListener("click", function () {
+            bulkAction("/jobs/bulk/dismiss", "Dismissed");
+        });
+    }
+
     // --- Search form loading state ---
     var searchForm = document.getElementById("searchForm");
     if (searchForm) {

@@ -423,6 +423,8 @@ html, body,
 }
 
 /* ---- Mobile Responsive ---- */
+
+/* Tablet (< 992px) */
 @media (max-width: 991.98px) {
     .col-lg-3 {
         order: 2;
@@ -460,8 +462,92 @@ html, body,
     .hero-section h1 {
         font-size: 1.75rem;
     }
+
+    /* Navbar mobile: reduce padding */
+    .navbar .nav-link {
+        padding: 0.4rem 0.5rem !important;
+        font-size: 0.85rem;
+    }
+
+    /* Search form: stack fields */
+    .search-form .row > [class*="col-"] {
+        flex: 0 0 100%;
+        max-width: 100%;
+        margin-bottom: 0.5rem;
+    }
+
+    /* Dashboard stats: 2 columns */
+    .dashboard-stats .col-md-3 {
+        flex: 0 0 50%;
+        max-width: 50%;
+    }
+
+    /* Pipeline table: horizontal scroll */
+    .table-responsive {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .table-responsive table th:first-child,
+    .table-responsive table td:first-child {
+        position: sticky;
+        left: 0;
+        background: var(--brand-surface);
+        z-index: 1;
+    }
+
+    [data-bs-theme="dark"] .table-responsive table th:first-child,
+    [data-bs-theme="dark"] .table-responsive table td:first-child {
+        background: var(--brand-surface);
+    }
 }
 
+/* Mobile (< 768px) */
+@media (max-width: 767.98px) {
+    /* Job cards: full width */
+    .job-card {
+        border-radius: var(--radius);
+    }
+
+    .job-card .card-title {
+        font-size: 1rem;
+    }
+
+    .job-card .card-subtitle {
+        font-size: 0.8rem;
+    }
+
+    .job-card .card-text {
+        font-size: 0.85rem;
+    }
+
+    /* Buttons: full width where appropriate */
+    .job-card .d-flex.gap-2 .btn {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    /* Hide less important columns */
+    .pipeline-hide-mobile {
+        display: none;
+    }
+
+    /* Stat cards smaller */
+    .stat-card .stat-number {
+        font-size: 1.5rem;
+    }
+
+    .stat-card .stat-label {
+        font-size: 0.75rem;
+    }
+
+    /* Search sidebar: collapse by default */
+    .filter-sidebar .card {
+        position: static;
+    }
+}
+
+/* Small mobile (< 576px) */
 @media (max-width: 575.98px) {
     h1 { font-size: 1.5rem; }
     h2 { font-size: 1.3rem; }
@@ -486,6 +572,51 @@ html, body,
 
     .hero-section p {
         font-size: 0.95rem;
+    }
+
+    /* Full-width buttons on tiny screens */
+    .btn-mobile-full {
+        width: 100%;
+        margin-bottom: 0.25rem;
+    }
+
+    /* Compact navbar */
+    .navbar {
+        padding: 0.5rem 0;
+    }
+
+    #themeToggle {
+        font-size: 0.7rem;
+        padding: 0.15rem 0.4rem;
+    }
+
+    /* Modal adjustments */
+    .modal-body {
+        padding: 1rem;
+    }
+
+    .modal-header {
+        padding: 0.75rem 1rem;
+    }
+
+    /* Table font size */
+    .table {
+        font-size: 0.8rem;
+    }
+
+    /* Badge spacing */
+    .badge {
+        font-size: 0.7rem;
+        padding: 0.25em 0.5em;
+    }
+
+    /* Progress bar */
+    .progress {
+        height: 20px !important;
+    }
+
+    .progress-bar {
+        font-size: 0.65rem;
     }
 }
 

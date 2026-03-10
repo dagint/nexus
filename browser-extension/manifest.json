@@ -19,7 +19,19 @@
         "*://*.indeed.com/*",
         "*://*.glassdoor.com/job-listing/*",
         "*://*.greenhouse.io/*",
-        "*://*.lever.co/*"
+        "*://*.lever.co/*",
+        "*://*.dice.com/job-detail/*",
+        "*://*.dice.com/jobs/*",
+        "*://*.wellfound.com/jobs/*",
+        "*://*.angel.co/jobs/*",
+        "*://*.remoteok.com/*",
+        "*://*.remoteok.io/*",
+        "*://*.builtin.com/job/*",
+        "*://*.builtin.com/jobs/*",
+        "*://*.simplyhired.com/job/*",
+        "*://*.simplyhired.com/search*",
+        "*://*.ziprecruiter.com/jobs/*",
+        "*://*.ziprecruiter.com/c/*"
       ],
       "js": ["content.js"],
       "css": ["content.css"]

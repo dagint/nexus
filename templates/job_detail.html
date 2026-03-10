@@ -58,6 +58,12 @@
                     {% if job.timezone_req %}
                     <span class="badge bg-outline-dark border text-dark">{{ job.timezone_req }}</span>
                     {% endif %}
+
+                    {% if job.salary_badge is defined and job.salary_badge %}
+                    <span class="badge bg-{{ 'success' if job.salary_badge == 'Above Market' else 'danger' if job.salary_badge == 'Below Market' else 'secondary' }}">
+                        {{ job.salary_badge }}
+                    </span>
+                    {% endif %}
                 </div>
 
                 <!-- Match summary -->
@@ -125,7 +131,12 @@
 
                 <!-- Full description -->
                 <div class="mb-3">
-                    <h6>Job Description</h6>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6>Job Description</h6>
+                        {% if has_description_changes is defined and has_description_changes %}
+                        <button class="btn btn-sm btn-outline-info" id="viewChangesBtn">View Changes</button>
+                        {% endif %}
+                    </div>
                     <div style="white-space: pre-wrap;" class="border rounded p-3 bg-body-tertiary">{{ job.description }}</div>
                 </div>
 
@@ -179,6 +190,12 @@
                         Cover Letter
                     </button>
 
+                    <button class="btn btn-outline-primary tailor-resume-btn"
+                            data-title="{{ job.title }}" data-company="{{ job.company }}"
+                            data-description="{{ job.description[:2000] | e }}">
+                        Tailor Resume
+                    </button>
+
                     <button class="btn btn-outline-primary screening-btn"
                             data-title="{{ job.title }}" data-company="{{ job.company }}"
                             data-description="{{ job.description[:2000] | e }}">
@@ -220,4 +237,166 @@
         </div>
     </div>
 </div>
+
+<!-- Tailor Resume Modal -->
+<div class="modal fade" id="tailorResumeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Tailored Resume Suggestions</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="tailorResumeContent">
+                <div class="text-center py-3">Loading...</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" id="copyTailorResults">Copy All</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Description Diff Modal -->
+<div class="modal fade" id="descDiffModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Description Changes</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="descDiffContent">
+                <div class="text-center py-3">Loading...</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Tailor Resume
+document.querySelectorAll('.tailor-resume-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var title = this.dataset.title || '';
+        var company = this.dataset.company || '';
+        var description = this.dataset.description || '';
+        var originalText = this.textContent;
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Analyzing...';
+
+        csrfFetch('/jobs/tailor-resume', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({title: title, company: company, description: description})
+        })
+        .then(function(resp) { return resp.json().then(function(data) { return {ok: resp.ok, data: data}; }); })
+        .then(function(result) {
+            btn.disabled = false;
+            btn.textContent = originalText;
+
+            if (!result.ok) {
+                alert(result.data.error || 'Failed to generate suggestions.');
+                return;
+            }
+
+            var d = result.data;
+            var html = '';
+
+            if (d.summary_suggestion) {
+                html += '<div class="card mb-3"><div class="card-header"><strong>Suggested Professional Summary</strong></div>';
+                html += '<div class="card-body"><p>' + d.summary_suggestion + '</p></div></div>';
+            }
+
+            if (d.sections_to_emphasize && d.sections_to_emphasize.length) {
+                html += '<div class="card mb-3"><div class="card-header"><strong>Sections to Emphasize</strong></div>';
+                html += '<div class="card-body"><ul>';
+                d.sections_to_emphasize.forEach(function(s) { html += '<li>' + s + '</li>'; });
+                html += '</ul></div></div>';
+            }
+
+            if (d.keywords_to_add && d.keywords_to_add.length) {
+                html += '<div class="card mb-3"><div class="card-header"><strong>Keywords to Add</strong></div>';
+                html += '<div class="card-body"><div class="d-flex flex-wrap gap-1">';
+                d.keywords_to_add.forEach(function(k) { html += '<span class="badge bg-danger">' + k + '</span>'; });
+                html += '</div></div></div>';
+            }
+
+            if (d.skills_to_highlight && d.skills_to_highlight.length) {
+                html += '<div class="card mb-3"><div class="card-header"><strong>Skills to Highlight</strong></div>';
+                html += '<div class="card-body"><div class="d-flex flex-wrap gap-1">';
+                d.skills_to_highlight.forEach(function(s) { html += '<span class="badge bg-success">' + s + '</span>'; });
+                html += '</div></div></div>';
+            }
+
+            if (d.reworded_bullets && d.reworded_bullets.length) {
+                html += '<div class="card mb-3"><div class="card-header"><strong>Reworded Bullet Points</strong></div>';
+                html += '<div class="card-body">';
+                d.reworded_bullets.forEach(function(b) {
+                    html += '<div class="mb-2 pb-2 border-bottom">';
+                    if (b.original) html += '<p class="small text-muted mb-1"><del>' + b.original + '</del></p>';
+                    html += '<p class="mb-0">' + b.suggested + '</p>';
+                    html += '</div>';
+                });
+                html += '</div></div>';
+            }
+
+            if (!html) html = '<p class="text-muted">No specific suggestions generated.</p>';
+
+            document.getElementById('tailorResumeContent').innerHTML = html;
+            var modal = new bootstrap.Modal(document.getElementById('tailorResumeModal'));
+            modal.show();
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.textContent = originalText;
+            alert('Error: ' + err.message);
+        });
+    });
+});
+
+// Copy tailor results
+var copyTailor = document.getElementById('copyTailorResults');
+if (copyTailor) {
+    copyTailor.addEventListener('click', function() {
+        var content = document.getElementById('tailorResumeContent').innerText;
+        navigator.clipboard.writeText(content).then(function() {
+            copyTailor.textContent = 'Copied!';
+            setTimeout(function() { copyTailor.textContent = 'Copy All'; }, 2000);
+        });
+    });
+}
+
+// View Description Changes
+var viewChangesBtn = document.getElementById('viewChangesBtn');
+if (viewChangesBtn) {
+    viewChangesBtn.addEventListener('click', function() {
+        var jobKey = '{{ job.job_key }}';
+        document.getElementById('descDiffContent').innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm me-1"></div> Loading diff...</div>';
+        var modal = new bootstrap.Modal(document.getElementById('descDiffModal'));
+        modal.show();
+
+        csrfFetch('/jobs/' + jobKey + '/description-diff')
+            .then(function(resp) { return resp.json(); })
+            .then(function(data) {
+                if (data.html_diff) {
+                    document.getElementById('descDiffContent').innerHTML =
+                        '<p class="small text-muted mb-2">' + data.snapshot_count + ' versions recorded. Showing changes between ' + (data.old_date || '').substring(0, 10) + ' and ' + (data.new_date || '').substring(0, 10) + '.</p>' +
+                        '<div class="table-responsive" style="font-size: 0.85rem;">' + data.html_diff + '</div>';
+                } else {
+                    document.getElementById('descDiffContent').innerHTML =
+                        '<p class="text-muted">' + (data.message || 'No changes detected.') + '</p>';
+                }
+            })
+            .catch(function(err) {
+                document.getElementById('descDiffContent').innerHTML =
+                    '<div class="alert alert-danger">Failed to load diff: ' + err.message + '</div>';
+            });
+    });
+}
+</script>
 {% endblock %}

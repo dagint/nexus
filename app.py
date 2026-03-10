@@ -38,6 +38,14 @@ from database import (
     update_follow_up_date,
     get_cached_interview_prep, save_interview_prep, get_all_interview_preps,
     get_interview_prep_by_id, delete_interview_prep,
+    snapshot_job_description, get_job_description_snapshots,
+    get_user_due_follow_ups,
+    create_webhook, get_webhooks, delete_webhook,
+    create_team, get_user_teams, get_team, get_team_members,
+    is_team_member, get_team_member_role, add_team_member, remove_team_member,
+    delete_team, share_job_with_team, get_team_shared_jobs, get_team_shared_job,
+    add_team_job_comment, get_team_job_comments, get_team_activity,
+    get_admin_stats, get_admin_users, is_user_admin,
 )
 
 setup_logging()
@@ -61,11 +69,24 @@ def _safe_int(value, default=0):
 
 # Security
 csrf = CSRFProtect(app)
+
+
+def _rate_limit_key():
+    """Use user ID when authenticated, falling back to IP address."""
+    try:
+        if current_user.is_authenticated:
+            return f"user:{current_user.id}"
+    except Exception:
+        pass
+    return get_remote_address()
+
+
 limiter = Limiter(
     app=app,
-    key_func=get_remote_address,
+    key_func=_rate_limit_key,
     default_limits=["60 per minute"],
     storage_uri="memory://",
+    headers_enabled=True,
 )
 
 # Auth
@@ -79,6 +100,7 @@ class User(UserMixin):
         self.id = user_data["id"]
         self.email = user_data["email"]
         self.name = user_data.get("name", "")
+        self.is_admin = bool(user_data.get("is_admin", 0))
 
 
 @login_manager.user_loader
@@ -87,6 +109,13 @@ def load_user(user_id):
     if data:
         return User(data)
     return None
+
+
+@app.before_request
+def _metrics_before():
+    """Record request start time for latency tracking."""
+    import time as _time
+    request._metrics_start = _time.time()
 
 
 @app.after_request
@@ -103,6 +132,22 @@ def set_security_headers(response):
         "base-uri 'self'; "
         "form-action 'self';"
     )
+
+    # Record metrics (skip /static and /metrics)
+    try:
+        import time as _time
+        from services.metrics import inc_request, inc_error, observe_latency
+        path = request.path
+        if not path.startswith("/static") and path != "/metrics":
+            inc_request(path, request.method)
+            if response.status_code >= 400:
+                inc_error(path, request.method)
+            start = getattr(request, "_metrics_start", None)
+            if start:
+                observe_latency(path, request.method, _time.time() - start)
+    except Exception:
+        pass
+
     return response
 
 
@@ -322,7 +367,7 @@ def index():
 
 
 @app.route("/search", methods=["GET", "POST"])
-@limiter.limit("10 per minute")
+@limiter.limit("5 per minute")
 def search():
     from services.resume_parser import parse_resume
     from services.skills_extractor import extract_keywords, extract_keywords_smart
@@ -535,12 +580,36 @@ def search():
                 logger.warning("Preference learning failed: %s", e)
         if remote_only:
             user_prefs["remote_only"] = True
-        jobs = score_jobs(jobs, resume_data, user_prefs, preference_profile)
+
+        # Load custom scoring weights
+        scoring_weights = None
+        if user_settings and user_settings.get("scoring_weights"):
+            try:
+                scoring_weights = json.loads(user_settings["scoring_weights"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        jobs = score_jobs(jobs, resume_data, user_prefs, preference_profile, scoring_weights)
 
         # Generate heuristic summaries only (AI summaries are on-demand via button)
         for job in jobs:
             if job.get("match_tier") == "strong" and job.get("match_reasons"):
                 job["match_summary"] = "Matches your profile: " + "; ".join(job["match_reasons"][:3]) + "."
+
+    # Record salary data for salary intelligence
+    if current_user.is_authenticated and jobs:
+        try:
+            from services.salary_intelligence import record_salary_from_jobs
+            record_salary_from_jobs(current_user.id, jobs, query, location)
+        except Exception as e:
+            logger.warning("Salary recording failed: %s", e)
+
+    # Record jobs searched metric
+    try:
+        from services.metrics import inc_jobs_searched
+        inc_jobs_searched(len(jobs))
+    except Exception:
+        pass
 
     # Role velocity signal (batch query — single DB connection)
     from database import get_role_velocities_batch
@@ -759,8 +828,9 @@ def pipeline():
     stage_filter = request.args.get("stage")
     applied = get_applied_jobs(current_user.id, stage_filter)
     stats = get_applied_stats(current_user.id)
+    today = datetime.now().strftime("%Y-%m-%d")
     return render_template("pipeline.html", jobs=applied, stats=stats,
-                           stages=PIPELINE_STAGES, current_stage=stage_filter)
+                           stages=PIPELINE_STAGES, current_stage=stage_filter, today=today)
 
 
 # --- Bookmarks ---
@@ -1064,6 +1134,10 @@ def dashboard():
     alerts_count = len(get_saved_searches(current_user.id))
     total_applied = sum(stats.values())
 
+    # Follow-up reminders (next 7 days)
+    due_follow_ups = get_user_due_follow_ups(current_user.id, days_ahead=7)
+    today = datetime.now().strftime("%Y-%m-%d")
+
     return render_template(
         "dashboard.html",
         stats=stats,
@@ -1074,6 +1148,8 @@ def dashboard():
         resumes_count=resumes_count,
         alerts_count=alerts_count,
         total_applied=total_applied,
+        due_follow_ups=due_follow_ups,
+        today=today,
     )
 
 
@@ -1087,12 +1163,29 @@ def settings():
     api_status = {p.name: p.is_available() for p in get_all_providers()}
     api_status["Claude AI (matching)"] = bool(Config.ANTHROPIC_API_KEY)
     api_status["SMTP (email)"] = bool(Config.SMTP_USER and Config.SMTP_PASSWORD)
-    return render_template("settings.html", settings=user_settings, api_status=api_status)
+
+    # Parse scoring weights for template
+    scoring_weights = {"skills": 50, "location": 50, "salary": 50, "experience": 50, "remote": 50}
+    if user_settings.get("scoring_weights"):
+        try:
+            scoring_weights.update(json.loads(user_settings["scoring_weights"]))
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    return render_template("settings.html", settings=user_settings, api_status=api_status, scoring_weights=scoring_weights)
 
 
 @app.route("/settings", methods=["POST"])
 @login_required
 def save_settings():
+    # Build scoring weights JSON
+    scoring_weights = json.dumps({
+        "skills": min(_safe_int(request.form.get("weight_skills"), 50), 100),
+        "location": min(_safe_int(request.form.get("weight_location"), 50), 100),
+        "salary": min(_safe_int(request.form.get("weight_salary"), 50), 100),
+        "experience": min(_safe_int(request.form.get("weight_experience"), 50), 100),
+        "remote": min(_safe_int(request.form.get("weight_remote"), 50), 100),
+    })
     update_user_settings(
         current_user.id,
         name=request.form.get("name", ""),
@@ -1102,6 +1195,7 @@ def save_settings():
         blocked_companies=request.form.get("blocked_companies", ""),
         blocked_keywords=request.form.get("blocked_keywords", ""),
         blocked_locations=request.form.get("blocked_locations", ""),
+        scoring_weights=scoring_weights,
     )
     flash("Settings saved.", "success")
     return redirect(url_for("settings"))
@@ -1160,10 +1254,62 @@ def job_detail(job_key):
         flash("Job not found. Try searching again.", "warning")
         return redirect(url_for("index"))
 
+    # Snapshot description for diff tracking
+    has_changes = False
+    if current_user.is_authenticated and job.get("description"):
+        try:
+            snapshot_job_description(current_user.id, job_key, job["description"])
+            snapshots = get_job_description_snapshots(current_user.id, job_key)
+            has_changes = len(snapshots) > 1
+        except Exception as e:
+            logger.warning("Description snapshot failed: %s", e)
+
     return render_template(
         "job_detail.html", job=job,
         applied_keys=applied_keys, bookmarked_keys=bookmarked_keys, dismissed_keys=dismissed_keys,
+        has_description_changes=has_changes,
     )
+
+
+@app.route("/jobs/<job_key>/description-diff")
+@login_required
+def job_description_diff(job_key):
+    """Show diff between job description snapshots."""
+    import difflib
+    snapshots = get_job_description_snapshots(current_user.id, job_key)
+    if len(snapshots) < 2:
+        return jsonify({"diff": None, "message": "No changes detected."})
+
+    # Compare last two versions
+    old = snapshots[-2]["description"]
+    new = snapshots[-1]["description"]
+    old_date = snapshots[-2]["snapshot_at"]
+    new_date = snapshots[-1]["snapshot_at"]
+
+    diff = difflib.unified_diff(
+        old.splitlines(keepends=True),
+        new.splitlines(keepends=True),
+        fromfile=f"Version ({old_date})",
+        tofile=f"Version ({new_date})",
+        lineterm="",
+    )
+    diff_text = "\n".join(diff)
+
+    # Also create an HTML diff
+    html_diff = difflib.HtmlDiff().make_table(
+        old.splitlines(), new.splitlines(),
+        fromdesc=f"Version ({old_date[:10]})",
+        todesc=f"Version ({new_date[:10]})",
+        context=True, numlines=3,
+    )
+
+    return jsonify({
+        "diff": diff_text,
+        "html_diff": html_diff,
+        "snapshot_count": len(snapshots),
+        "old_date": old_date,
+        "new_date": new_date,
+    })
 
 
 # --- Analytics ---
@@ -1424,6 +1570,493 @@ def interview_prep_delete(pid):
     delete_interview_prep(pid, current_user.id)
     flash("Interview prep deleted.", "success")
     return redirect(url_for("interview_prep_list"))
+
+
+# --- CSV Import ---
+
+@app.route("/jobs/import-csv", methods=["POST"])
+@login_required
+def import_csv_route():
+    """Import job listings from a CSV file."""
+    file = request.files.get("csv_file")
+    if not file or not file.filename:
+        flash("No file selected.", "error")
+        return redirect(url_for("bookmarks"))
+
+    if not file.filename.lower().endswith(".csv"):
+        flash("Please upload a CSV file.", "error")
+        return redirect(url_for("bookmarks"))
+
+    try:
+        content = file.read().decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(content))
+
+        success_count = 0
+        error_count = 0
+
+        for row in reader:
+            try:
+                job_data = {
+                    "job_key": f"csv_{row.get('title', '')}_{row.get('company', '')}_{success_count}".replace(" ", "_")[:100],
+                    "title": row.get("title", "").strip(),
+                    "company": row.get("company", "").strip(),
+                    "location": row.get("location", "").strip(),
+                    "apply_url": row.get("apply_url", "").strip(),
+                    "salary_min": float(row["salary_min"]) if row.get("salary_min") else None,
+                    "salary_max": float(row["salary_max"]) if row.get("salary_max") else None,
+                    "description": row.get("description", "").strip(),
+                    "remote_status": row.get("remote_status", "").strip(),
+                    "source": row.get("source", "CSV Import").strip() or "CSV Import",
+                }
+                if not job_data["title"]:
+                    error_count += 1
+                    continue
+                bookmark_job(current_user.id, job_data)
+                success_count += 1
+            except Exception:
+                error_count += 1
+
+        if success_count > 0:
+            flash(f"Successfully imported {success_count} job(s).", "success")
+        if error_count > 0:
+            flash(f"Failed to import {error_count} row(s).", "warning")
+        if success_count == 0 and error_count == 0:
+            flash("No valid rows found in the CSV.", "warning")
+
+    except Exception as e:
+        logger.error("CSV import failed: %s", e)
+        flash(f"Failed to parse CSV file: {str(e)}", "error")
+
+    return redirect(url_for("bookmarks"))
+
+
+# --- Resume Tailoring ---
+
+@app.route("/jobs/tailor-resume", methods=["POST"])
+@login_required
+@limiter.limit("10 per minute")
+def tailor_resume_route():
+    """Generate tailored resume suggestions for a specific job."""
+    from services.resume_tailor import tailor_resume
+    data = request.get_json() or {}
+
+    job_title = data.get("title", "")
+    company = data.get("company", "")
+    job_description = data.get("description", "")
+
+    default = get_default_resume(current_user.id)
+    if not default:
+        return jsonify({"error": "No resume saved. Upload a resume first."}), 400
+
+    result = tailor_resume(default["raw_text"], job_title, company, job_description)
+
+    # Track AI call
+    try:
+        from services.metrics import inc_ai_calls
+        inc_ai_calls("resume_tailor")
+    except Exception:
+        pass
+
+    return jsonify(result)
+
+
+# --- Application Auto-fill ---
+
+@app.route("/jobs/autofill-data", methods=["GET"])
+@login_required
+def autofill_data():
+    """Get extracted application data from the user's resume."""
+    user_settings = get_user_settings(current_user.id)
+
+    # Return cached data if available
+    if user_settings.get("user_autofill_data"):
+        try:
+            return jsonify(json.loads(user_settings["user_autofill_data"]))
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Generate fresh data
+    from services.application_autofill import generate_autofill
+    default = get_default_resume(current_user.id)
+    if not default:
+        return jsonify({"error": "No resume saved. Upload a resume first."}), 400
+
+    result = generate_autofill(default["raw_text"], user_settings)
+
+    # Cache the result
+    update_user_settings(current_user.id, user_autofill_data=json.dumps(result))
+
+    return jsonify(result)
+
+
+# --- Salary Insights ---
+
+@app.route("/salary-insights")
+@login_required
+def salary_insights():
+    """Page showing salary data aggregated from user's searched roles."""
+    from services.salary_intelligence import get_salary_insights
+    role = request.args.get("role", "")
+    location = request.args.get("location", "")
+    insights = get_salary_insights(current_user.id, role_query=role or None, location=location or None)
+    return render_template("salary_insights.html", insights=insights, role=role, location=location)
+
+
+# --- Prometheus Metrics ---
+
+@app.route("/metrics")
+@csrf.exempt
+@limiter.exempt
+def prometheus_metrics():
+    """Prometheus-compatible metrics endpoint."""
+    from services.metrics import render_metrics
+    return Response(render_metrics(), mimetype="text/plain; version=0.0.4; charset=utf-8")
+
+
+# --- Webhooks ---
+
+@app.route("/settings/webhooks", methods=["GET", "POST"])
+@login_required
+def webhooks_settings():
+    if request.method == "POST":
+        url = request.form.get("url", "").strip()
+        secret = request.form.get("secret", "").strip() or None
+        event_types_raw = request.form.getlist("event_types")
+        if not event_types_raw:
+            event_types_raw = ["new_matches"]
+
+        if not url:
+            flash("Webhook URL is required.", "error")
+            return redirect(url_for("webhooks_settings"))
+
+        if not url.startswith("http://") and not url.startswith("https://"):
+            flash("Webhook URL must start with http:// or https://", "error")
+            return redirect(url_for("webhooks_settings"))
+
+        create_webhook(current_user.id, url, event_types=event_types_raw, secret=secret)
+        flash("Webhook created.", "success")
+        return redirect(url_for("webhooks_settings"))
+
+    hooks = get_webhooks(current_user.id)
+    return render_template("webhooks.html", webhooks=hooks)
+
+
+@app.route("/settings/webhooks/<int:wid>/delete", methods=["POST"])
+@login_required
+def webhook_delete(wid):
+    delete_webhook(wid, current_user.id)
+    flash("Webhook deleted.", "success")
+    return redirect(url_for("webhooks_settings"))
+
+
+@app.route("/settings/webhooks/<int:wid>/test", methods=["POST"])
+@login_required
+def webhook_test(wid):
+    hooks = get_webhooks(current_user.id)
+    wh = next((h for h in hooks if h["id"] == wid), None)
+    if not wh:
+        flash("Webhook not found.", "error")
+        return redirect(url_for("webhooks_settings"))
+
+    from services.webhook_sender import send_test_webhook
+    success, detail = send_test_webhook(wh["url"], secret=wh.get("secret"))
+    if success:
+        flash(f"Test webhook sent successfully (status {detail}).", "success")
+    else:
+        flash(f"Test webhook failed: {detail}", "error")
+    return redirect(url_for("webhooks_settings"))
+
+
+# --- Bulk Actions ---
+
+@app.route("/jobs/bulk/bookmark", methods=["POST"])
+@login_required
+def bulk_bookmark():
+    data = request.get_json() or {}
+    jobs = data.get("jobs", [])
+    count = 0
+    for job_data in jobs:
+        try:
+            bookmark_job(current_user.id, job_data)
+            count += 1
+        except Exception:
+            pass
+    return jsonify({"status": "ok", "count": count})
+
+
+@app.route("/jobs/bulk/apply", methods=["POST"])
+@login_required
+def bulk_apply():
+    data = request.get_json() or {}
+    jobs = data.get("jobs", [])
+    count = 0
+    for job_data in jobs:
+        try:
+            mark_applied(
+                current_user.id,
+                job_data.get("job_key", ""),
+                title=job_data.get("title", ""),
+                company=job_data.get("company", ""),
+            )
+            count += 1
+        except Exception:
+            pass
+    return jsonify({"status": "ok", "count": count})
+
+
+@app.route("/jobs/bulk/dismiss", methods=["POST"])
+@login_required
+def bulk_dismiss():
+    data = request.get_json() or {}
+    jobs = data.get("jobs", [])
+    count = 0
+    for job_data in jobs:
+        try:
+            dismiss_job(
+                current_user.id,
+                job_data.get("job_key", ""),
+                title=job_data.get("title", ""),
+                company=job_data.get("company", ""),
+            )
+            count += 1
+        except Exception:
+            pass
+    return jsonify({"status": "ok", "count": count})
+
+
+# --- LinkedIn Helper ---
+
+@app.route("/jobs/linkedin-note", methods=["POST"])
+@login_required
+@limiter.limit("10 per minute")
+def linkedin_note():
+    from services.linkedin_helper import generate_linkedin_note, generate_linkedin_message, get_linkedin_search_url
+    data = request.get_json() or {}
+
+    job_title = data.get("title", "")
+    company = data.get("company", "")
+    recruiter_name = data.get("recruiter_name", "")
+
+    default = get_default_resume(current_user.id)
+    resume_text = default["raw_text"] if default else ""
+
+    note = generate_linkedin_note(resume_text, job_title, company, user_id=current_user.id)
+    message = generate_linkedin_message(resume_text, job_title, company,
+                                         recruiter_name=recruiter_name or None,
+                                         user_id=current_user.id)
+    search_urls = get_linkedin_search_url(job_title, company)
+
+    return jsonify({
+        "connection_note": note,
+        "inmail_message": message,
+        "search_urls": search_urls,
+    })
+
+
+# --- Networking Advice ---
+
+@app.route("/jobs/networking-advice", methods=["POST"])
+@login_required
+@limiter.limit("10 per minute")
+def networking_advice():
+    from services.networking_advisor import get_networking_suggestions
+    data = request.get_json() or {}
+
+    job_title = data.get("title", "")
+    company = data.get("company", "")
+    job_description = data.get("description", "")
+
+    default = get_default_resume(current_user.id)
+    resume_text = default["raw_text"] if default else ""
+
+    result = get_networking_suggestions(resume_text, job_title, company,
+                                        job_description=job_description,
+                                        user_id=current_user.id)
+    return jsonify(result)
+
+
+# --- Teams ---
+
+@app.route("/teams")
+@login_required
+def teams_list():
+    teams = get_user_teams(current_user.id)
+    return render_template("teams.html", teams=teams)
+
+
+@app.route("/teams", methods=["POST"])
+@login_required
+def teams_create():
+    name = request.form.get("name", "").strip()
+    if not name:
+        flash("Team name is required.", "error")
+        return redirect(url_for("teams_list"))
+    create_team(name, current_user.id)
+    flash(f'Team "{name}" created.', "success")
+    return redirect(url_for("teams_list"))
+
+
+@app.route("/teams/<int:tid>")
+@login_required
+def team_detail(tid):
+    if not is_team_member(tid, current_user.id):
+        flash("You are not a member of this team.", "error")
+        return redirect(url_for("teams_list"))
+
+    team = get_team(tid)
+    if not team:
+        flash("Team not found.", "error")
+        return redirect(url_for("teams_list"))
+
+    members = get_team_members(tid)
+    shared_jobs = get_team_shared_jobs(tid)
+    activity = get_team_activity(tid, limit=20)
+    user_role = get_team_member_role(tid, current_user.id)
+
+    return render_template("team_detail.html", team=team, members=members,
+                           shared_jobs=shared_jobs, activity=activity,
+                           user_role=user_role)
+
+
+@app.route("/teams/<int:tid>/invite", methods=["POST"])
+@login_required
+def team_invite(tid):
+    role = get_team_member_role(tid, current_user.id)
+    if role != "admin":
+        flash("Only team admins can invite members.", "error")
+        return redirect(url_for("team_detail", tid=tid))
+
+    email = request.form.get("email", "").strip()
+    if not email:
+        flash("Email is required.", "error")
+        return redirect(url_for("team_detail", tid=tid))
+
+    user = get_user_by_email(email)
+    if not user:
+        flash("No user found with that email.", "error")
+        return redirect(url_for("team_detail", tid=tid))
+
+    if is_team_member(tid, user["id"]):
+        flash("User is already a member of this team.", "warning")
+        return redirect(url_for("team_detail", tid=tid))
+
+    add_team_member(tid, user["id"], role="member")
+    team = get_team(tid)
+    create_notification(user["id"],
+                        message=f'You were added to team "{team["name"]}"',
+                        link="/teams")
+    flash(f'Invited {email} to the team.', "success")
+    return redirect(url_for("team_detail", tid=tid))
+
+
+@app.route("/teams/<int:tid>/leave", methods=["POST"])
+@login_required
+def team_leave(tid):
+    if not is_team_member(tid, current_user.id):
+        flash("You are not a member of this team.", "error")
+        return redirect(url_for("teams_list"))
+
+    team = get_team(tid)
+    # If the user is the creator and only admin, delete the team
+    role = get_team_member_role(tid, current_user.id)
+    if role == "admin" and team["created_by"] == current_user.id:
+        members = get_team_members(tid)
+        admin_count = sum(1 for m in members if m["role"] == "admin")
+        if admin_count <= 1:
+            delete_team(tid)
+            flash("Team deleted (you were the only admin).", "success")
+            return redirect(url_for("teams_list"))
+
+    remove_team_member(tid, current_user.id)
+    flash("You left the team.", "success")
+    return redirect(url_for("teams_list"))
+
+
+@app.route("/teams/<int:tid>/share-job", methods=["POST"])
+@login_required
+def team_share_job(tid):
+    if not is_team_member(tid, current_user.id):
+        return jsonify({"error": "Not a team member."}), 403
+
+    data = request.get_json() or {}
+    job_key = data.get("job_key", "")
+    if not job_key:
+        return jsonify({"error": "job_key is required."}), 400
+
+    jid = share_job_with_team(
+        tid, current_user.id, job_key,
+        title=data.get("title", ""),
+        company=data.get("company", ""),
+        location=data.get("location", ""),
+        apply_url=data.get("apply_url", ""),
+        notes=data.get("notes", ""),
+    )
+    return jsonify({"status": "ok", "id": jid})
+
+
+@app.route("/teams/<int:tid>/jobs/<int:jid>/comment", methods=["POST"])
+@login_required
+def team_job_comment(tid, jid):
+    if not is_team_member(tid, current_user.id):
+        return jsonify({"error": "Not a team member."}), 403
+
+    data = request.get_json() or {}
+    comment = (data.get("comment") or "").strip()
+    if not comment:
+        return jsonify({"error": "Comment is required."}), 400
+
+    cid = add_team_job_comment(jid, current_user.id, comment)
+
+    # Notify the job sharer if it's not the commenter
+    job = get_team_shared_job(jid)
+    if job and job["shared_by"] != current_user.id:
+        team = get_team(tid)
+        create_notification(
+            job["shared_by"],
+            message=f'{current_user.name or current_user.email} commented on "{job["title"]}" in {team["name"]}',
+            link=f"/teams/{tid}",
+        )
+
+    return jsonify({"status": "ok", "id": cid})
+
+
+@app.route("/teams/<int:tid>/jobs/<int:jid>/comments", methods=["GET"])
+@login_required
+def team_job_comments_list(tid, jid):
+    if not is_team_member(tid, current_user.id):
+        return jsonify({"error": "Not a team member."}), 403
+    comments = get_team_job_comments(jid)
+    return jsonify({"comments": comments})
+
+
+# --- Admin ---
+
+def admin_required(f):
+    """Decorator to require admin access."""
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for("login"))
+        if not is_user_admin(current_user.id):
+            flash("Admin access required.", "error")
+            return redirect(url_for("index"))
+        return f(*args, **kwargs)
+    return decorated
+
+
+@app.route("/admin")
+@admin_required
+def admin_dashboard():
+    stats = get_admin_stats()
+    return render_template("admin.html", stats=stats)
+
+
+@app.route("/admin/users")
+@admin_required
+def admin_users():
+    users = get_admin_users()
+    return render_template("admin_users.html", users=users)
 
 
 # --- Startup ---

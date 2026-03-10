@@ -68,13 +68,20 @@
                             <li><a class="dropdown-item" href="/bookmarks">Bookmarks</a></li>
                             <li><a class="dropdown-item" href="/calendar">Calendar</a></li>
                             <li><a class="dropdown-item" href="/analytics">Analytics</a></li>
+                            <li><a class="dropdown-item" href="/salary-insights">Salary Insights</a></li>
                             <li><a class="dropdown-item" href="/usage">API Usage</a></li>
                             <li><a class="dropdown-item" href="/resumes">Resumes</a></li>
                             <li><a class="dropdown-item" href="/history">Search History</a></li>
                             <li><a class="dropdown-item" href="/alerts">Alerts</a></li>
                             <li><a class="dropdown-item" href="/interview-prep">Interview Prep</a></li>
                             <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="/teams">Teams</a></li>
+                            <li><a class="dropdown-item" href="/settings/webhooks">Webhooks</a></li>
                             <li><a class="dropdown-item" href="/settings">Settings</a></li>
+                            {% if current_user.is_admin %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="/admin">Admin</a></li>
+                            {% endif %}
                         </ul>
                     </li>
                     <li class="nav-item">
@@ -203,6 +210,66 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" id="copyDraft">Copy All</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LinkedIn Helper Modal -->
+    <div class="modal fade" id="linkedinHelperModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">LinkedIn Helper</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="linkedinHelperContent">
+                        <div class="text-center py-3"><span class="spinner-border spinner-border-sm"></span> Loading...</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Networking Tips Modal -->
+    <div class="modal fade" id="networkingModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Networking Tips</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="networkingContent">
+                        <div class="text-center py-3"><span class="spinner-border spinner-border-sm"></span> Loading...</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" id="copyNetworkingTips">Copy All</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tailor Resume Modal -->
+    <div class="modal fade" id="tailorResumeModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Tailored Resume Suggestions</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="tailorResumeContent">
+                    <div class="text-center py-3">Loading...</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" id="copyTailorResults">Copy All</button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>

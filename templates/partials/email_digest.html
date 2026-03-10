@@ -1,12 +1,60 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"></head>
-<body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+<head>
+<meta charset="utf-8">
+<style>
+    @media (prefers-color-scheme: dark) {
+        body {
+            background-color: #1a1a2e !important;
+            color: #e0e0e0 !important;
+        }
+        h2, h3 {
+            color: #e0e0e0 !important;
+        }
+        .stats-box {
+            background: #16213e !important;
+        }
+        .stats-box div {
+            color: #e0e0e0 !important;
+        }
+        .job-card-email {
+            border-color: #2a2a4a !important;
+            background: #16213e !important;
+        }
+        .job-card-email div, .job-card-email span, .job-card-email p {
+            color: #e0e0e0 !important;
+        }
+        .job-card-email a {
+            color: #64b5f6 !important;
+        }
+        .tier-heading {
+            border-bottom-color: currentColor !important;
+        }
+        .text-secondary-email {
+            color: #a0a0a0 !important;
+        }
+        .badge-email {
+            background: #2a4a6e !important;
+            color: #e0e0e0 !important;
+        }
+        .badge-remote {
+            background: #1b5e20 !important;
+        }
+        .badge-hybrid {
+            background: #1a3a5c !important;
+        }
+        .badge-quick {
+            background: #1565c0 !important;
+        }
+    }
+</style>
+</head>
+<body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;background-color:#ffffff;color:#333333">
     <h2 style="color:#333">Job Alert: {{ new_count }} new matches</h2>
     {% if is_consolidated is defined and is_consolidated and search_queries %}
     <p>From your alerts:
         {% for q in search_queries %}
-        <span style="display:inline-block;background:#e9ecef;padding:2px 8px;border-radius:4px;margin:2px;font-size:13px">{{ q }}</span>
+        <span class="badge-email" style="display:inline-block;background:#e9ecef;padding:2px 8px;border-radius:4px;margin:2px;font-size:13px">{{ q }}</span>
         {% endfor %}
     </p>
     {% else %}
@@ -14,23 +62,23 @@
     {% endif %}
 
     <!-- Summary stats -->
-    <div style="background:#f8f9fa;border-radius:8px;padding:12px;margin-bottom:16px">
+    <div class="stats-box" style="background:#f8f9fa;border-radius:8px;padding:12px;margin-bottom:16px">
         <table style="width:100%">
             <tr>
                 <td style="text-align:center;padding:4px">
                     <div style="font-size:24px;font-weight:bold;color:#28a745">{{ new_count }}</div>
-                    <div style="font-size:11px;color:#666">New This Week</div>
+                    <div style="font-size:11px;color:#666" class="text-secondary-email">New This Week</div>
                 </td>
                 {% if still_open_count is defined and still_open_count %}
                 <td style="text-align:center;padding:4px">
                     <div style="font-size:24px;font-weight:bold;color:#007bff">{{ still_open_count }}</div>
-                    <div style="font-size:11px;color:#666">Still Open</div>
+                    <div style="font-size:11px;color:#666" class="text-secondary-email">Still Open</div>
                 </td>
                 {% endif %}
                 {% if tiers.strong %}
                 <td style="text-align:center;padding:4px">
                     <div style="font-size:24px;font-weight:bold;color:#28a745">{{ tiers.strong | length }}</div>
-                    <div style="font-size:11px;color:#666">Strong Matches</div>
+                    <div style="font-size:11px;color:#666" class="text-secondary-email">Strong Matches</div>
                 </td>
                 {% endif %}
             </tr>
@@ -40,24 +88,24 @@
     <!-- New jobs by tier -->
     {% for tier_name, tier_label, color in [('strong', 'Strong Match', '#28a745'), ('possible', 'Possible', '#ffc107'), ('stretch', 'Stretch', '#6c757d')] %}
     {% if tiers[tier_name] %}
-    <h3 style="color:{{ color }};border-bottom:2px solid {{ color }};padding-bottom:5px">
+    <h3 class="tier-heading" style="color:{{ color }};border-bottom:2px solid {{ color }};padding-bottom:5px">
         {{ tier_label }} ({{ tiers[tier_name] | length }})
     </h3>
     {% for job in tiers[tier_name][:10] %}
-    <div style="border:1px solid #eee;border-radius:8px;padding:12px;margin-bottom:10px">
+    <div class="job-card-email" style="border:1px solid #eee;border-radius:8px;padding:12px;margin-bottom:10px">
         <div style="font-size:16px;font-weight:bold">{{ job.title }}</div>
-        <div style="color:#666">{{ job.company }} &mdash; {{ job.location }}</div>
+        <div style="color:#666" class="text-secondary-email">{{ job.company }} &mdash; {{ job.location }}</div>
         {% if job.match_score is defined %}
         <div style="color:{{ color }};font-size:12px">Score: {{ job.match_score }}/100</div>
         {% endif %}
         <div style="margin-top:4px">
             {% if job.remote_status == 'remote' %}
-            <span style="background:#28a745;color:white;padding:2px 6px;border-radius:3px;font-size:11px">Remote</span>
+            <span class="badge-remote" style="background:#28a745;color:white;padding:2px 6px;border-radius:3px;font-size:11px">Remote</span>
             {% elif job.remote_status == 'hybrid' %}
-            <span style="background:#17a2b8;color:white;padding:2px 6px;border-radius:3px;font-size:11px">Hybrid</span>
+            <span class="badge-hybrid" style="background:#17a2b8;color:white;padding:2px 6px;border-radius:3px;font-size:11px">Hybrid</span>
             {% endif %}
             {% if job.easy_apply %}
-            <span style="background:#0d6efd;color:white;padding:2px 6px;border-radius:3px;font-size:11px">Quick Apply</span>
+            <span class="badge-quick" style="background:#0d6efd;color:white;padding:2px 6px;border-radius:3px;font-size:11px">Quick Apply</span>
             {% endif %}
         </div>
         {% if job.salary_min or job.salary_max %}
@@ -68,12 +116,12 @@
         </div>
         {% endif %}
         {% if job.company_info %}
-        <div style="font-size:11px;color:#666;margin-top:4px">
+        <div style="font-size:11px;color:#666;margin-top:4px" class="text-secondary-email">
             {% if job.company_info.size %}{{ job.company_info.size }}{% endif %}
             {% if job.company_info.glassdoor_rating %} | Rating: {{ job.company_info.glassdoor_rating }}{% endif %}
         </div>
         {% endif %}
-        <p style="font-size:13px;color:#888;margin:8px 0 4px">{{ job.description | striptags | truncate(200, True) }}</p>
+        <p style="font-size:13px;color:#888;margin:8px 0 4px" class="text-secondary-email">{{ job.description | striptags | truncate(200, True) }}</p>
         {% if job.match_summary %}
         <p style="font-size:12px;color:#28a745;margin:4px 0"><em>{{ job.match_summary }}</em></p>
         {% endif %}
@@ -85,14 +133,14 @@
 
     <!-- Still open jobs -->
     {% if still_open_jobs %}
-    <h3 style="color:#007bff;border-bottom:2px solid #007bff;padding-bottom:5px">
+    <h3 class="tier-heading" style="color:#007bff;border-bottom:2px solid #007bff;padding-bottom:5px">
         Still Open ({{ still_open_jobs | length }})
     </h3>
-    <p style="font-size:12px;color:#666">Previously seen jobs that are still active:</p>
+    <p style="font-size:12px;color:#666" class="text-secondary-email">Previously seen jobs that are still active:</p>
     {% for job in still_open_jobs[:5] %}
-    <div style="border:1px solid #eee;border-radius:8px;padding:8px 12px;margin-bottom:6px">
+    <div class="job-card-email" style="border:1px solid #eee;border-radius:8px;padding:8px 12px;margin-bottom:6px">
         <div style="font-size:14px"><strong>{{ job.title }}</strong> at {{ job.company }}</div>
-        <div style="font-size:12px;color:#666">
+        <div style="font-size:12px;color:#666" class="text-secondary-email">
             {{ job.location }}
             {% if job.match_score is defined %} | Score: {{ job.match_score }}/100{% endif %}
             <a href="{{ job.apply_url }}" style="color:#007bff;margin-left:8px">Apply &rarr;</a>
@@ -102,6 +150,6 @@
     {% endif %}
 
     <hr style="margin-top:20px">
-    <p style="color:#999;font-size:11px">Sent by Nexus. Manage alerts at your dashboard.</p>
+    <p style="color:#999;font-size:11px" class="text-secondary-email">Sent by Nexus. Manage alerts at your dashboard.</p>
 </body>
 </html>

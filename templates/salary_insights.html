@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}Salary Insights{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <h2 class="mb-4">Salary Insights</h2>
+
+        <!-- Filter form -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <form method="GET" action="{{ url_for('salary_insights') }}" class="row g-2 align-items-end">
+                    <div class="col-md-5">
+                        <label class="form-label">Role / Job Title</label>
+                        <input type="text" class="form-control" name="role" value="{{ role }}" placeholder="e.g., Software Engineer">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Location</label>
+                        <input type="text" class="form-control" name="location" value="{{ location }}" placeholder="e.g., New York">
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-primary w-100">Filter</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {% if insights.sample_size > 0 %}
+        <!-- Summary stats -->
+        <div class="row mb-4 dashboard-stats">
+            <div class="col-md-4 col-6 mb-3">
+                <div class="card text-center stat-card">
+                    <div class="card-body">
+                        <div class="stat-number">${{ "{:,.0f}".format(insights.median) }}</div>
+                        <div class="stat-label">Median Salary</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 col-6 mb-3">
+                <div class="card text-center stat-card">
+                    <div class="card-body">
+                        <div class="stat-number">${{ "{:,.0f}".format(insights.p25) }} - ${{ "{:,.0f}".format(insights.p75) }}</div>
+                        <div class="stat-label">25th-75th Percentile</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 col-6 mb-3">
+                <div class="card text-center stat-card">
+                    <div class="card-body">
+                        <div class="stat-number">{{ insights.sample_size }}</div>
+                        <div class="stat-label">Data Points</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Salary Range Bar -->
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0">Salary Range</h5></div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between small text-muted mb-1">
+                    <span>Min: ${{ "{:,.0f}".format(insights.min) }}</span>
+                    <span>Median: ${{ "{:,.0f}".format(insights.median) }}</span>
+                    <span>Max: ${{ "{:,.0f}".format(insights.max) }}</span>
+                </div>
+                <div class="progress" style="height: 30px;">
+                    {% set range = insights.max - insights.min if insights.max > insights.min else 1 %}
+                    {% set p25_pct = ((insights.p25 - insights.min) / range * 100) %}
+                    {% set mid_pct = ((insights.p75 - insights.p25) / range * 100) %}
+                    {% set p75_pct = ((insights.max - insights.p75) / range * 100) %}
+                    <div class="progress-bar bg-secondary" style="width: {{ p25_pct }}%">
+                        <small>Lower 25%</small>
+                    </div>
+                    <div class="progress-bar bg-success" style="width: {{ mid_pct }}%">
+                        <small>Mid Range</small>
+                    </div>
+                    <div class="progress-bar bg-primary" style="width: {{ p75_pct }}%">
+                        <small>Upper 25%</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- By Source -->
+        {% if insights.by_source %}
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0">By Source</h5></div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Source</th>
+                            <th>Median Salary</th>
+                            <th>Data Points</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for source, data in insights.by_source.items() %}
+                        <tr>
+                            <td>{{ source }}</td>
+                            <td>${{ "{:,.0f}".format(data.median) }}</td>
+                            <td>{{ data.count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Top Companies -->
+        {% if insights.by_company %}
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0">Top Companies by Salary</h5></div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Company</th>
+                            <th>Salary Range</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in insights.by_company[:10] %}
+                        <tr>
+                            <td>{{ entry.company }}</td>
+                            <td>
+                                {% if entry.salary_min and entry.salary_max %}
+                                ${{ "{:,.0f}".format(entry.salary_min) }} - ${{ "{:,.0f}".format(entry.salary_max) }}
+                                {% elif entry.salary_max %}
+                                Up to ${{ "{:,.0f}".format(entry.salary_max) }}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="card">
+            <div class="card-body text-center py-4">
+                <p class="text-muted mb-2">No salary data collected yet.</p>
+                <p class="small text-muted">Salary data is automatically recorded from your job search results. Search for jobs to start building your salary intelligence.</p>
+                <a href="{{ url_for('index') }}" class="btn btn-primary">Search Jobs</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

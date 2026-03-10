@@ -98,6 +98,12 @@
         <!-- Sort + Export bar -->
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div class="d-flex gap-2 align-items-center">
+                {% if current_user.is_authenticated %}
+                <div class="form-check me-2">
+                    <input type="checkbox" class="form-check-input" id="selectAllJobs">
+                    <label class="form-check-label small" for="selectAllJobs">Select All</label>
+                </div>
+                {% endif %}
                 <small class="text-muted">Sort by:</small>
                 <a href="{{ url_for('search', query=query, location=location, sort='score', page=1) }}"
                    class="btn btn-sm {{ 'btn-primary' if sort == 'score' else 'btn-outline-secondary' }}">Match Score</a>
@@ -151,12 +157,17 @@
         {% endfor %}
         {% endif %}
 
-        <!-- Compare bar -->
+        <!-- Action bar (compare + bulk actions) -->
         <div id="compareBar" class="position-fixed bottom-0 start-50 translate-middle-x mb-3 d-none" style="z-index: 1050;">
             <div class="card shadow">
-                <div class="card-body py-2 px-4 d-flex align-items-center gap-3">
+                <div class="card-body py-2 px-4 d-flex align-items-center gap-3 flex-wrap">
                     <span><span id="compareCount">0</span> jobs selected</span>
                     <button id="compareBtn" class="btn btn-sm btn-primary" disabled>Compare</button>
+                    {% if current_user.is_authenticated %}
+                    <button id="bulkBookmarkBtn" class="btn btn-sm btn-outline-warning">Bookmark Selected</button>
+                    <button id="bulkApplyBtn" class="btn btn-sm btn-outline-success">Apply Selected</button>
+                    <button id="bulkDismissBtn" class="btn btn-sm btn-outline-secondary">Dismiss Selected</button>
+                    {% endif %}
                     <button id="compareClear" class="btn btn-sm btn-outline-secondary">Clear</button>
                 </div>
             </div>
