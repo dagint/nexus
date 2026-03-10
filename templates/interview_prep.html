@@ -1,110 +1,49 @@
 {% extends "base.html" %}
 
-{% block title %}Interview Prep - {{ job_title }} at {{ company }}{% endblock %}
+{% block title %}Saved Interview Preps{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-lg-8">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <div>
-                <h2 class="mb-1">Interview Prep</h2>
-                <h5 class="text-muted">{{ job_title }} at {{ company }}</h5>
-            </div>
-            <div class="d-flex gap-2">
-                <button class="btn btn-outline-secondary" onclick="window.print()">Print</button>
-                <a href="{{ back_url or url_for('index') }}" class="btn btn-outline-primary">Back to Results</a>
-            </div>
-        </div>
-
-        <!-- Technical Questions -->
-        {% if technical_questions %}
-        <div class="card mb-4">
-            <div class="card-header"><h5 class="mb-0">Technical Questions</h5></div>
-            <div class="card-body p-0">
-                <div class="accordion accordion-flush" id="technicalAccordion">
-                    {% for q in technical_questions %}
-                    <div class="accordion-item">
-                        <h2 class="accordion-header">
-                            <button class="accordion-button collapsed" type="button"
-                                    data-bs-toggle="collapse" data-bs-target="#tech-{{ loop.index }}">
-                                {{ q.question }}
-                            </button>
-                        </h2>
-                        <div id="tech-{{ loop.index }}" class="accordion-collapse collapse"
-                             data-bs-parent="#technicalAccordion">
-                            <div class="accordion-body">
-                                <ul class="mb-0">
-                                    {% for point in q.talking_points %}
-                                    <li>{{ point }}</li>
-                                    {% endfor %}
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- Behavioral Questions -->
-        {% if behavioral_questions %}
-        <div class="card mb-4">
-            <div class="card-header"><h5 class="mb-0">Behavioral Questions</h5></div>
-            <div class="card-body p-0">
-                <div class="accordion accordion-flush" id="behavioralAccordion">
-                    {% for q in behavioral_questions %}
-                    <div class="accordion-item">
-                        <h2 class="accordion-header">
-                            <button class="accordion-button collapsed" type="button"
-                                    data-bs-toggle="collapse" data-bs-target="#behav-{{ loop.index }}">
-                                {{ q.question }}
-                            </button>
-                        </h2>
-                        <div id="behav-{{ loop.index }}" class="accordion-collapse collapse"
-                             data-bs-parent="#behavioralAccordion">
-                            <div class="accordion-body">
-                                <ul class="mb-0">
-                                    {% for point in q.talking_points %}
-                                    <li>{{ point }}</li>
-                                    {% endfor %}
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- Questions to Ask -->
-        {% if questions_to_ask %}
-        <div class="card mb-4">
-            <div class="card-header"><h5 class="mb-0">Questions to Ask</h5></div>
-            <div class="card-body">
-                <ol class="mb-0">
-                    {% for q in questions_to_ask %}
-                    <li class="mb-1">{{ q }}</li>
-                    {% endfor %}
-                </ol>
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- Company Research Tips -->
-        {% if research_tips %}
-        <div class="card mb-4">
-            <div class="card-header"><h5 class="mb-0">Company Research Tips</h5></div>
-            <div class="card-body">
-                <ul class="mb-0">
-                    {% for tip in research_tips %}
-                    <li class="mb-1">{{ tip }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-        </div>
-        {% endif %}
-    </div>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Saved Interview Preps</h2>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">Dashboard</a>
 </div>
+
+{% if preps %}
+<div class="table-responsive">
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th>Company</th>
+                <th>Job Title</th>
+                <th>Saved</th>
+                <th>Updated</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for prep in preps %}
+            <tr>
+                <td><strong>{{ prep.company }}</strong></td>
+                <td>{{ prep.job_title }}</td>
+                <td><small>{{ prep.created_at[:10] if prep.created_at else '' }}</small></td>
+                <td><small>{{ prep.updated_at[:10] if prep.updated_at else '' }}</small></td>
+                <td>
+                    <a href="{{ url_for('interview_prep_detail', pid=prep.id) }}" class="btn btn-sm btn-outline-primary">View</a>
+                    <form method="POST" action="{{ url_for('interview_prep_delete', pid=prep.id) }}" class="d-inline"
+                          onsubmit="return confirm('Delete this interview prep?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="text-center text-muted py-5">
+    <p>No saved interview preps yet.</p>
+    <p>Generate interview prep from any job listing's action menu, and it will be saved here automatically.</p>
+</div>
+{% endif %}
 {% endblock %}

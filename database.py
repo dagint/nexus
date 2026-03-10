@@ -263,11 +263,57 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_applied_jobs_user_id ON applied_jobs(user_id);
         CREATE INDEX IF NOT EXISTS idx_dismissed_jobs_user_id ON dismissed_jobs(user_id);
         CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+
+        CREATE TABLE IF NOT EXISTS search_templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            category TEXT,
+            query TEXT NOT NULL,
+            location TEXT DEFAULT '',
+            remote_only INTEGER DEFAULT 0,
+            description TEXT,
+            is_system INTEGER DEFAULT 1,
+            user_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS job_contacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            job_key TEXT NOT NULL,
+            name TEXT,
+            email TEXT,
+            phone TEXT,
+            role TEXT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_job_contacts_user_job ON job_contacts(user_id, job_key);
+
+        CREATE TABLE IF NOT EXISTS interview_prep_cache (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            company TEXT NOT NULL,
+            job_title TEXT NOT NULL,
+            job_key TEXT,
+            prep_json TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_prep_cache_user ON interview_prep_cache(user_id);
     """)
     conn.commit()
 
     # Schema migrations for existing databases
     _migrate_add_column(conn, "saved_searches", "is_active", "INTEGER DEFAULT 1")
+    _migrate_add_column(conn, "users", "blocked_keywords", "TEXT DEFAULT '[]'")
+    _migrate_add_column(conn, "users", "blocked_locations", "TEXT DEFAULT '[]'")
+    _migrate_add_column(conn, "applied_jobs", "follow_up_date", "TEXT")
+
+    seed_search_templates(conn)
 
     _safe_close(conn)
     logger.info("Database initialized at %s", Config.DB_PATH)
@@ -615,7 +661,7 @@ def cache_company(company_name, data):
 def get_user_settings(user_id):
     conn = get_db()
     row = conn.execute(
-        "SELECT timezone, max_commute_minutes, seniority_tier, blocked_companies FROM users WHERE id = ?",
+        "SELECT timezone, max_commute_minutes, seniority_tier, blocked_companies, blocked_keywords, blocked_locations FROM users WHERE id = ?",
         (user_id,),
     ).fetchone()
     _safe_close(conn)
@@ -624,7 +670,7 @@ def get_user_settings(user_id):
 
 def update_user_settings(user_id, **kwargs):
     conn = get_db()
-    allowed = {"timezone", "max_commute_minutes", "seniority_tier", "blocked_companies", "name"}
+    allowed = {"timezone", "max_commute_minutes", "seniority_tier", "blocked_companies", "blocked_keywords", "blocked_locations", "name"}
     fields = {k: v for k, v in kwargs.items() if k in allowed}
     if not fields:
         return
@@ -1051,6 +1097,208 @@ def get_role_velocity(company, title, months=6):
     ).fetchone()
     _safe_close(conn)
     return row["count"] if row else 0
+
+
+# --- Search Templates ---
+
+def seed_search_templates(conn=None):
+    """Insert system search templates if none exist."""
+    own_conn = conn is None
+    if own_conn:
+        conn = get_db()
+    existing = conn.execute("SELECT COUNT(*) as c FROM search_templates WHERE is_system = 1").fetchone()
+    if existing["c"] > 0:
+        if own_conn:
+            _safe_close(conn)
+        return
+    templates = [
+        ("Remote Python Backend Engineer", "Engineering", "python backend engineer", "", 1, "Python, Django/Flask, APIs, microservices"),
+        ("Full-Stack React Developer", "Engineering", "full stack react developer", "", 0, "React, Node.js, full-stack web development"),
+        ("Senior Data Engineer", "Data", "senior data engineer", "", 0, "ETL pipelines, Spark, SQL, data warehousing"),
+        ("DevOps / SRE Engineer", "DevOps", "devops site reliability engineer", "", 0, "Kubernetes, Docker, CI/CD, cloud infrastructure"),
+        ("Product Manager - Tech", "Product", "technical product manager", "", 0, "Product roadmap, Agile, stakeholder management"),
+        ("UX/UI Designer", "Design", "ux ui designer", "", 0, "Figma, user research, design systems"),
+        ("Machine Learning Engineer", "Data", "machine learning engineer", "", 0, "Python, PyTorch/TensorFlow, ML pipelines"),
+        ("Cloud Solutions Architect", "DevOps", "cloud solutions architect AWS", "", 0, "AWS, system design, cloud migration"),
+        ("Frontend Engineer (React/Vue)", "Engineering", "frontend engineer react vue", "", 0, "React, Vue, TypeScript, CSS"),
+        ("Backend Java/Kotlin Developer", "Engineering", "backend java kotlin developer", "", 0, "Java, Spring Boot, Kotlin, microservices"),
+        ("Data Analyst / BI", "Data", "data analyst business intelligence", "", 0, "SQL, Tableau/Power BI, Python, data visualization"),
+        ("Mobile Developer (iOS/Android)", "Engineering", "mobile developer ios android", "", 0, "Swift, Kotlin, React Native, Flutter"),
+    ]
+    conn.executemany(
+        """INSERT INTO search_templates (name, category, query, location, remote_only, description, is_system, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, 1, NULL)""",
+        templates,
+    )
+    conn.commit()
+    if own_conn:
+        _safe_close(conn)
+    logger.info("Seeded %d system search templates", len(templates))
+
+
+def get_search_templates(user_id=None):
+    """Return system templates plus user's custom templates."""
+    conn = get_db()
+    if user_id:
+        rows = conn.execute(
+            "SELECT * FROM search_templates WHERE is_system = 1 OR user_id = ? ORDER BY category, name",
+            (user_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM search_templates WHERE is_system = 1 ORDER BY category, name"
+        ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+def create_search_template(user_id, name, query, location="", remote_only=False, description="", category=""):
+    conn = get_db()
+    cursor = conn.execute(
+        """INSERT INTO search_templates (name, category, query, location, remote_only, description, is_system, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, 0, ?)""",
+        (name, category, query, location, int(remote_only), description, user_id),
+    )
+    conn.commit()
+    tid = cursor.lastrowid
+    _safe_close(conn)
+    return tid
+
+
+def delete_search_template(template_id, user_id):
+    """Delete a user template. System templates cannot be deleted."""
+    conn = get_db()
+    conn.execute(
+        "DELETE FROM search_templates WHERE id = ? AND user_id = ? AND is_system = 0",
+        (template_id, user_id),
+    )
+    conn.commit()
+    _safe_close(conn)
+
+
+# --- Job Contacts ---
+
+def add_job_contact(user_id, job_key, name="", email="", phone="", role="", notes=""):
+    conn = get_db()
+    cursor = conn.execute(
+        """INSERT INTO job_contacts (user_id, job_key, name, email, phone, role, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (user_id, job_key, name, email, phone, role, notes),
+    )
+    conn.commit()
+    cid = cursor.lastrowid
+    _safe_close(conn)
+    return cid
+
+
+def get_job_contacts(user_id, job_key):
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM job_contacts WHERE user_id = ? AND job_key = ? ORDER BY created_at DESC",
+        (user_id, job_key),
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+def update_job_contact(contact_id, user_id, **kwargs):
+    conn = get_db()
+    allowed = {"name", "email", "phone", "role", "notes"}
+    fields = {k: v for k, v in kwargs.items() if k in allowed}
+    if not fields:
+        _safe_close(conn)
+        return
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    values = list(fields.values()) + [contact_id, user_id]
+    conn.execute(f"UPDATE job_contacts SET {set_clause} WHERE id = ? AND user_id = ?", values)
+    conn.commit()
+    _safe_close(conn)
+
+
+def delete_job_contact(contact_id, user_id):
+    conn = get_db()
+    conn.execute("DELETE FROM job_contacts WHERE id = ? AND user_id = ?", (contact_id, user_id))
+    conn.commit()
+    _safe_close(conn)
+
+
+def update_follow_up_date(user_id, job_key, follow_up_date):
+    conn = get_db()
+    conn.execute(
+        "UPDATE applied_jobs SET follow_up_date = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND job_key = ?",
+        (follow_up_date, user_id, job_key),
+    )
+    conn.commit()
+    _safe_close(conn)
+
+
+# --- Interview Prep Cache ---
+
+def get_cached_interview_prep(user_id, company, job_title):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM interview_prep_cache WHERE user_id = ? AND company = ? AND job_title = ? ORDER BY updated_at DESC LIMIT 1",
+        (user_id, company, job_title),
+    ).fetchone()
+    _safe_close(conn)
+    if row:
+        result = dict(row)
+        result["prep"] = json.loads(result["prep_json"])
+        return result
+    return None
+
+
+def save_interview_prep(user_id, company, job_title, job_key, prep_json):
+    conn = get_db()
+    existing = conn.execute(
+        "SELECT id FROM interview_prep_cache WHERE user_id = ? AND company = ? AND job_title = ?",
+        (user_id, company, job_title),
+    ).fetchone()
+    if existing:
+        conn.execute(
+            "UPDATE interview_prep_cache SET prep_json = ?, job_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (prep_json if isinstance(prep_json, str) else json.dumps(prep_json), job_key, existing["id"]),
+        )
+    else:
+        conn.execute(
+            """INSERT INTO interview_prep_cache (user_id, company, job_title, job_key, prep_json)
+               VALUES (?, ?, ?, ?, ?)""",
+            (user_id, company, job_title, job_key,
+             prep_json if isinstance(prep_json, str) else json.dumps(prep_json)),
+        )
+    conn.commit()
+    _safe_close(conn)
+
+
+def get_all_interview_preps(user_id):
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, company, job_title, job_key, created_at, updated_at FROM interview_prep_cache WHERE user_id = ? ORDER BY updated_at DESC",
+        (user_id,),
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+def get_interview_prep_by_id(prep_id, user_id):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM interview_prep_cache WHERE id = ? AND user_id = ?",
+        (prep_id, user_id),
+    ).fetchone()
+    _safe_close(conn)
+    if row:
+        result = dict(row)
+        result["prep"] = json.loads(result["prep_json"])
+        return result
+    return None
+
+
+def delete_interview_prep(prep_id, user_id):
+    conn = get_db()
+    conn.execute("DELETE FROM interview_prep_cache WHERE id = ? AND user_id = ?", (prep_id, user_id))
+    conn.commit()
+    _safe_close(conn)
 
 
 def get_role_velocities_batch(company_title_pairs, months=6):

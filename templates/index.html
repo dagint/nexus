@@ -53,10 +53,39 @@
             </div>
 
             <div class="card mb-4">
-                <div class="card-header">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">Search Options</h5>
+                    {% if current_user.is_authenticated %}
+                    <a href="#" class="small text-decoration-none" data-bs-toggle="modal" data-bs-target="#saveTemplateModal">Save current search as template</a>
+                    {% endif %}
                 </div>
                 <div class="card-body">
+                    {% if templates_by_category %}
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Quick Search Templates</label>
+                        {% for category, cat_templates in templates_by_category.items() %}
+                        <div class="mb-2">
+                            <small class="text-muted d-block mb-1">{{ category }}</small>
+                            <div class="d-flex flex-wrap gap-1">
+                                {% for t in cat_templates %}
+                                <button type="button" class="btn btn-sm btn-outline-secondary template-btn"
+                                        data-query="{{ t.query }}"
+                                        data-location="{{ t.location or '' }}"
+                                        data-remote="{{ t.remote_only }}"
+                                        title="{{ t.description or '' }}">
+                                    {{ t.name }}
+                                    {% if not t.is_system %}
+                                    <span class="badge bg-info ms-1">Custom</span>
+                                    {% endif %}
+                                </button>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <hr>
+                    {% endif %}
+
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label for="query" class="form-label">Job Title / Keywords</label>
@@ -116,4 +145,85 @@
         </div>
     </div>
 </div>
+
+{% if current_user.is_authenticated %}
+<!-- Save Template Modal -->
+<div class="modal fade" id="saveTemplateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Save Search as Template</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="templateName" class="form-label">Template Name</label>
+                    <input type="text" class="form-control" id="templateName" placeholder="e.g., My Python Jobs Search">
+                </div>
+                <div class="mb-3">
+                    <label for="templateCategory" class="form-label">Category</label>
+                    <input type="text" class="form-control" id="templateCategory" placeholder="e.g., Engineering" value="Custom">
+                </div>
+                <div class="mb-3">
+                    <label for="templateDesc" class="form-label">Description (optional)</label>
+                    <input type="text" class="form-control" id="templateDesc" placeholder="Short description">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveTemplateBtn">Save Template</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Quick Search Template buttons
+document.querySelectorAll('.template-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var queryInput = document.getElementById('query');
+        var locationInput = document.getElementById('location');
+        var remoteCheck = document.getElementById('remote_only');
+        if (queryInput) queryInput.value = this.dataset.query || '';
+        if (locationInput) locationInput.value = this.dataset.location || '';
+        if (remoteCheck) remoteCheck.checked = this.dataset.remote === '1';
+    });
+});
+
+// Save Template
+var saveBtn = document.getElementById('saveTemplateBtn');
+if (saveBtn) {
+    saveBtn.addEventListener('click', function() {
+        var name = document.getElementById('templateName').value.trim();
+        var category = document.getElementById('templateCategory').value.trim() || 'Custom';
+        var description = document.getElementById('templateDesc').value.trim();
+        var query = document.getElementById('query').value.trim();
+        var loc = document.getElementById('location').value.trim();
+        var remoteOnly = document.getElementById('remote_only').checked;
+
+        if (!name) { alert('Please enter a template name.'); return; }
+        if (!query) { alert('Please enter a search query first.'); return; }
+
+        csrfFetch('/templates/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: name, query: query, location: loc,
+                remote_only: remoteOnly, description: description, category: category
+            })
+        })
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+            if (data.status === 'ok') {
+                window.location.reload();
+            } else {
+                alert(data.error || 'Failed to save template.');
+            }
+        });
+    });
+}
+</script>
 {% endblock %}
