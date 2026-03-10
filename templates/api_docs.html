@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}API Documentation - Nexus{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <h2 class="mb-4">REST API Documentation</h2>
+        <p class="text-muted">Nexus provides a versioned REST API for programmatic access to your job search data.</p>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Authentication</h5>
+            </div>
+            <div class="card-body">
+                <p>All API endpoints require token authentication. Generate a token in <a href="{{ url_for('settings') }}">Settings</a>.</p>
+                <p>Include the token in the <code>X-API-Token</code> header:</p>
+                <pre class="bg-body-secondary p-3 rounded"><code>curl -H "X-API-Token: YOUR_TOKEN" {{ request.host_url }}api/v1/pipeline</code></pre>
+                <p class="text-muted small mb-0">Alternatively, use <code>Authorization: Bearer YOUR_TOKEN</code>.</p>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Rate Limiting</h5>
+            </div>
+            <div class="card-body">
+                <p class="mb-0">API requests are rate limited to <strong>30 requests per minute</strong> per token.</p>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Response Format</h5>
+            </div>
+            <div class="card-body">
+                <p>All responses follow a consistent JSON format:</p>
+                <pre class="bg-body-secondary p-3 rounded"><code>{
+  "data": [...],
+  "meta": { "total": 42, "page": 1, "per_page": 20 }
+}</code></pre>
+                <p class="mb-0">Errors return: <code>{"error": "Error message"}</code></p>
+            </div>
+        </div>
+
+        <h4 class="mt-4 mb-3">Endpoints</h4>
+
+        <!-- Search -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <code class="text-success">GET</code> <code>/api/v1/jobs/search</code>
+            </div>
+            <div class="card-body">
+                <p>Search for jobs across all configured providers.</p>
+                <table class="table table-sm">
+                    <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>q</code></td><td>string (required)</td><td>Search query</td></tr>
+                        <tr><td><code>location</code></td><td>string</td><td>Location filter</td></tr>
+                        <tr><td><code>remote_only</code></td><td>boolean</td><td>Filter to remote jobs</td></tr>
+                        <tr><td><code>page</code></td><td>integer</td><td>Page number (default: 1)</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Pipeline -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <code class="text-success">GET</code> <code>/api/v1/pipeline</code>
+            </div>
+            <div class="card-body">
+                <p>List all jobs in your pipeline.</p>
+                <table class="table table-sm">
+                    <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>stage</code></td><td>string</td><td>Filter by stage (applied, screen, interview, offer, rejected, withdrawn)</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header">
+                <code class="text-warning">POST</code> <code>/api/v1/pipeline/&lt;job_key&gt;/stage</code>
+            </div>
+            <div class="card-body">
+                <p>Update the pipeline stage of a job.</p>
+                <p>Body: <code>{"stage": "interview", "notes": "optional notes"}</code></p>
+            </div>
+        </div>
+
+        <!-- Bookmarks -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <code class="text-success">GET</code> <code>/api/v1/bookmarks</code>
+            </div>
+            <div class="card-body">
+                <p>List all bookmarked jobs.</p>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header">
+                <code class="text-warning">POST</code> <code>/api/v1/bookmarks</code>
+            </div>
+            <div class="card-body">
+                <p>Bookmark a job.</p>
+                <p>Body: <code>{"job_key": "...", "title": "...", "company": "..."}</code></p>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header">
+                <code class="text-danger">DELETE</code> <code>/api/v1/bookmarks/&lt;job_key&gt;</code>
+            </div>
+            <div class="card-body">
+                <p>Remove a bookmark.</p>
+            </div>
+        </div>
+
+        <!-- Analytics -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <code class="text-success">GET</code> <code>/api/v1/analytics</code>
+            </div>
+            <div class="card-body">
+                <p class="mb-0">Get summary statistics for your job search.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

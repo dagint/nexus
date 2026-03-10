@@ -391,6 +391,64 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS idx_team_job_comments_job ON team_job_comments(team_shared_job_id);
+
+        CREATE TABLE IF NOT EXISTS api_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token_hash TEXT NOT NULL,
+            name TEXT DEFAULT 'API Token',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_used_at TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_api_tokens_user_id ON api_tokens(user_id);
+        CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens(token_hash);
+
+        CREATE TABLE IF NOT EXISTS oauth_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            provider TEXT NOT NULL,
+            provider_user_id TEXT NOT NULL,
+            email TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE(provider, provider_user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_oauth_accounts_user ON oauth_accounts(user_id);
+
+        CREATE TABLE IF NOT EXISTS merged_jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            canonical_job_key TEXT NOT NULL,
+            source_job_key TEXT NOT NULL,
+            source_name TEXT NOT NULL,
+            source_url TEXT,
+            merged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_merged_jobs_canonical ON merged_jobs(canonical_job_key);
+
+        CREATE TABLE IF NOT EXISTS stage_transitions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            job_key TEXT NOT NULL,
+            from_stage TEXT,
+            to_stage TEXT NOT NULL,
+            transitioned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_stage_transitions_user ON stage_transitions(user_id);
+
+        CREATE TABLE IF NOT EXISTS salary_observations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            role_query TEXT NOT NULL,
+            location TEXT,
+            salary_min REAL,
+            salary_max REAL,
+            source TEXT,
+            observed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_salary_obs_user ON salary_observations(user_id);
     """)
     conn.commit()
 
@@ -402,6 +460,9 @@ def init_db():
     _migrate_add_column(conn, "users", "scoring_weights", "TEXT")
     _migrate_add_column(conn, "users", "user_autofill_data", "TEXT")
     _migrate_add_column(conn, "users", "is_admin", "INTEGER DEFAULT 0")
+    _migrate_add_column(conn, "search_history", "avg_salary", "REAL")
+    _migrate_add_column(conn, "applied_jobs", "resume_id", "INTEGER")
+    _migrate_add_column(conn, "users", "weekly_report_enabled", "INTEGER DEFAULT 1")
 
     seed_search_templates(conn)
 
@@ -645,6 +706,12 @@ PIPELINE_STAGES = ["applied", "screen", "interview", "offer", "rejected", "withd
 
 def mark_applied(user_id, job_key, title, company, notes="", location="", apply_url="", stage="applied"):
     conn = get_db()
+    # Check if this is a new application or update
+    existing = conn.execute(
+        "SELECT stage FROM applied_jobs WHERE user_id = ? AND job_key = ?",
+        (user_id, job_key),
+    ).fetchone()
+
     conn.execute(
         """INSERT INTO applied_jobs (user_id, job_key, title, company, location, apply_url, stage, notes)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -652,12 +719,28 @@ def mark_applied(user_id, job_key, title, company, notes="", location="", apply_
                stage = excluded.stage, notes = excluded.notes, updated_at = CURRENT_TIMESTAMP""",
         (user_id, job_key, title, company, location, apply_url, stage, notes),
     )
+
+    # Record stage transition
+    from_stage = existing["stage"] if existing else None
+    if from_stage != stage:
+        conn.execute(
+            "INSERT INTO stage_transitions (user_id, job_key, from_stage, to_stage) VALUES (?, ?, ?, ?)",
+            (user_id, job_key, from_stage, stage),
+        )
+
     conn.commit()
     _safe_close(conn)
 
 
 def update_applied_stage(user_id, job_key, stage, notes=None):
     conn = get_db()
+    # Get current stage before updating (for transition tracking)
+    current = conn.execute(
+        "SELECT stage FROM applied_jobs WHERE user_id = ? AND job_key = ?",
+        (user_id, job_key),
+    ).fetchone()
+    from_stage = current["stage"] if current else None
+
     if notes is not None:
         conn.execute(
             "UPDATE applied_jobs SET stage = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND job_key = ?",
@@ -668,6 +751,14 @@ def update_applied_stage(user_id, job_key, stage, notes=None):
             "UPDATE applied_jobs SET stage = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND job_key = ?",
             (stage, user_id, job_key),
         )
+
+    # Record stage transition
+    if from_stage != stage:
+        conn.execute(
+            "INSERT INTO stage_transitions (user_id, job_key, from_stage, to_stage) VALUES (?, ?, ?, ?)",
+            (user_id, job_key, from_stage, stage),
+        )
+
     conn.commit()
     _safe_close(conn)
 
@@ -751,7 +842,7 @@ def cache_company(company_name, data):
 def get_user_settings(user_id):
     conn = get_db()
     row = conn.execute(
-        "SELECT timezone, max_commute_minutes, seniority_tier, blocked_companies, blocked_keywords, blocked_locations, scoring_weights, user_autofill_data FROM users WHERE id = ?",
+        "SELECT timezone, max_commute_minutes, seniority_tier, blocked_companies, blocked_keywords, blocked_locations, scoring_weights, user_autofill_data, weekly_report_enabled FROM users WHERE id = ?",
         (user_id,),
     ).fetchone()
     _safe_close(conn)
@@ -760,7 +851,7 @@ def get_user_settings(user_id):
 
 def update_user_settings(user_id, **kwargs):
     conn = get_db()
-    allowed = {"timezone", "max_commute_minutes", "seniority_tier", "blocked_companies", "blocked_keywords", "blocked_locations", "name", "scoring_weights", "user_autofill_data"}
+    allowed = {"timezone", "max_commute_minutes", "seniority_tier", "blocked_companies", "blocked_keywords", "blocked_locations", "name", "scoring_weights", "user_autofill_data", "weekly_report_enabled"}
     fields = {k: v for k, v in kwargs.items() if k in allowed}
     if not fields:
         return
@@ -1757,6 +1848,188 @@ def get_team_activity(team_id, limit=20):
     return activity[:limit]
 
 
+# --- Merged Jobs (Deduplication Provenance) ---
+
+def record_merge(canonical_job_key, source_job_key, source_name, source_url=None):
+    """Record that a duplicate job was merged into a canonical listing."""
+    conn = get_db()
+    conn.execute(
+        """INSERT OR IGNORE INTO merged_jobs (canonical_job_key, source_job_key, source_name, source_url)
+           VALUES (?, ?, ?, ?)""",
+        (canonical_job_key, source_job_key, source_name, source_url),
+    )
+    conn.commit()
+    _safe_close(conn)
+
+
+def record_merges_batch(merges):
+    """Record multiple merges at once. merges is a list of (canonical_key, source_key, source_name, source_url)."""
+    if not merges:
+        return
+    conn = get_db()
+    conn.executemany(
+        """INSERT OR IGNORE INTO merged_jobs (canonical_job_key, source_job_key, source_name, source_url)
+           VALUES (?, ?, ?, ?)""",
+        merges,
+    )
+    conn.commit()
+    _safe_close(conn)
+
+
+def get_merge_sources(canonical_job_key):
+    """Get all alternate sources for a canonical job key."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT source_name, source_url, merged_at FROM merged_jobs WHERE canonical_job_key = ? ORDER BY merged_at DESC",
+        (canonical_job_key,),
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+def get_merge_sources_batch(job_keys):
+    """Get alternate sources for multiple job keys at once. Returns dict of job_key -> list of sources."""
+    if not job_keys:
+        return {}
+    conn = get_db()
+    placeholders = ",".join("?" * len(job_keys))
+    rows = conn.execute(
+        f"SELECT canonical_job_key, source_name, source_url FROM merged_jobs WHERE canonical_job_key IN ({placeholders})",
+        list(job_keys),
+    ).fetchall()
+    _safe_close(conn)
+
+    result = {}
+    for row in rows:
+        key = row["canonical_job_key"]
+        if key not in result:
+            result[key] = []
+        result[key].append({"source": row["source_name"], "url": row["source_url"]})
+    return result
+
+
+# --- Stage Transitions ---
+
+def get_stage_transitions(user_id, job_key=None):
+    """Get stage transitions for a user, optionally filtered by job key."""
+    conn = get_db()
+    if job_key:
+        rows = conn.execute(
+            "SELECT * FROM stage_transitions WHERE user_id = ? AND job_key = ? ORDER BY transitioned_at ASC",
+            (user_id, job_key),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM stage_transitions WHERE user_id = ? ORDER BY transitioned_at ASC",
+            (user_id,),
+        ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+# --- Salary Observations ---
+
+def record_salary_observation(user_id, role_query, location=None, salary_min=None, salary_max=None, source=None):
+    """Record a salary observation from search results."""
+    conn = get_db()
+    conn.execute(
+        """INSERT INTO salary_observations (user_id, role_query, location, salary_min, salary_max, source)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (user_id, role_query, location, salary_min, salary_max, source),
+    )
+    conn.commit()
+    _safe_close(conn)
+
+
+def record_salary_observations_batch(observations):
+    """Record multiple salary observations. observations is list of (user_id, role_query, location, salary_min, salary_max, source)."""
+    if not observations:
+        return
+    conn = get_db()
+    conn.executemany(
+        """INSERT INTO salary_observations (user_id, role_query, location, salary_min, salary_max, source)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        observations,
+    )
+    conn.commit()
+    _safe_close(conn)
+
+
+def get_salary_benchmarks(user_id, role_query=None):
+    """Compute salary percentiles from salary_data (existing) and salary_observations tables.
+
+    Returns dict with p25, median, p75, sample_size, by_role.
+    """
+    import statistics as _stats
+
+    conn = get_db()
+    params = [user_id]
+    where_extra = ""
+    if role_query:
+        where_extra = " AND role_query LIKE ?"
+        params.append(f"%{role_query}%")
+
+    # Pull from both salary_data and salary_observations
+    midpoints = []
+
+    # From salary_data
+    rows1 = conn.execute(
+        f"SELECT salary_min, salary_max, role_query FROM salary_data WHERE user_id = ?{where_extra} ORDER BY recorded_at DESC LIMIT 500",
+        params,
+    ).fetchall()
+    for r in rows1:
+        s_min = r["salary_min"] or 0
+        s_max = r["salary_max"] or 0
+        if s_min > 0 or s_max > 0:
+            mid = (s_min + s_max) / 2 if s_min > 0 and s_max > 0 else max(s_min, s_max)
+            midpoints.append(mid)
+
+    # From salary_observations
+    params2 = [user_id]
+    where2 = ""
+    if role_query:
+        where2 = " AND role_query LIKE ?"
+        params2.append(f"%{role_query}%")
+
+    rows2 = conn.execute(
+        f"SELECT salary_min, salary_max FROM salary_observations WHERE user_id = ?{where2} ORDER BY observed_at DESC LIMIT 500",
+        params2,
+    ).fetchall()
+    for r in rows2:
+        s_min = r["salary_min"] or 0
+        s_max = r["salary_max"] or 0
+        if s_min > 0 or s_max > 0:
+            mid = (s_min + s_max) / 2 if s_min > 0 and s_max > 0 else max(s_min, s_max)
+            midpoints.append(mid)
+
+    _safe_close(conn)
+
+    if not midpoints:
+        return {"p25": None, "median": None, "p75": None, "sample_size": 0}
+
+    midpoints.sort()
+    n = len(midpoints)
+    return {
+        "p25": round(midpoints[n // 4]) if n >= 4 else round(midpoints[0]),
+        "median": round(_stats.median(midpoints)),
+        "p75": round(midpoints[3 * n // 4]) if n >= 4 else round(midpoints[-1]),
+        "sample_size": n,
+    }
+
+
+# --- Search History with avg_salary ---
+
+def add_search_history_with_salary(user_id, query, location, remote_only, resume_id=None, result_count=0, avg_salary=None):
+    """Add search history entry including optional average salary."""
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO search_history (user_id, query, location, remote_only, resume_id, result_count, avg_salary) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (user_id, query, location, int(remote_only), resume_id, result_count, avg_salary),
+    )
+    conn.commit()
+    _safe_close(conn)
+
+
 # --- Admin ---
 
 def get_admin_stats():
@@ -1796,3 +2069,223 @@ def is_user_admin(user_id):
     row = conn.execute("SELECT is_admin FROM users WHERE id = ?", (user_id,)).fetchone()
     _safe_close(conn)
     return bool(row and row["is_admin"])
+
+
+# --- API Tokens ---
+
+def create_api_token(user_id, name="API Token"):
+    """Create a new API token. Returns the plain token (only shown once); stores the hash."""
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    conn = get_db()
+    cursor = conn.execute(
+        "INSERT INTO api_tokens (user_id, token_hash, name) VALUES (?, ?, ?)",
+        (user_id, token_hash, name),
+    )
+    conn.commit()
+    _safe_close(conn)
+    return token, cursor.lastrowid
+
+
+def validate_api_token(token):
+    """Validate an API token and return the user_id, or None if invalid."""
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    conn = get_db()
+    row = conn.execute(
+        "SELECT user_id FROM api_tokens WHERE token_hash = ?", (token_hash,)
+    ).fetchone()
+    if row:
+        conn.execute(
+            "UPDATE api_tokens SET last_used_at = CURRENT_TIMESTAMP WHERE token_hash = ?",
+            (token_hash,),
+        )
+        conn.commit()
+    _safe_close(conn)
+    return row["user_id"] if row else None
+
+
+def get_api_tokens(user_id):
+    """Get all API tokens for a user (without hashes)."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, name, created_at, last_used_at FROM api_tokens WHERE user_id = ? ORDER BY created_at DESC",
+        (user_id,),
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+def delete_api_token(token_id, user_id):
+    """Delete an API token."""
+    conn = get_db()
+    conn.execute(
+        "DELETE FROM api_tokens WHERE id = ? AND user_id = ?",
+        (token_id, user_id),
+    )
+    conn.commit()
+    _safe_close(conn)
+
+
+# --- OAuth Accounts ---
+
+def create_oauth_account(user_id, provider, provider_user_id, email=None):
+    """Link an OAuth account to a user."""
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT INTO oauth_accounts (user_id, provider, provider_user_id, email) VALUES (?, ?, ?, ?)",
+            (user_id, provider, provider_user_id, email),
+        )
+        conn.commit()
+    except sqlite3.IntegrityError:
+        _safe_close(conn)
+        return False
+    _safe_close(conn)
+    return True
+
+
+def get_oauth_account(provider, provider_user_id):
+    """Get a user by OAuth provider + ID."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM oauth_accounts WHERE provider = ? AND provider_user_id = ?",
+        (provider, provider_user_id),
+    ).fetchone()
+    _safe_close(conn)
+    return dict(row) if row else None
+
+
+def link_oauth_account(user_id, provider, provider_user_id, email=None):
+    """Link an OAuth account to an existing user (alias for create_oauth_account)."""
+    return create_oauth_account(user_id, provider, provider_user_id, email)
+
+
+def get_user_oauth_accounts(user_id):
+    """Get all OAuth accounts linked to a user."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM oauth_accounts WHERE user_id = ? ORDER BY created_at DESC",
+        (user_id,),
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+# --- Weekly Report Data ---
+
+def get_weekly_report_users():
+    """Get all users who have weekly reports enabled."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, email, name FROM users WHERE weekly_report_enabled = 1"
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+def get_user_weekly_stats(user_id, days=7):
+    """Get job search stats for the past N days for a user."""
+    conn = get_db()
+    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+
+    # Applications this week
+    apps_this_week = conn.execute(
+        "SELECT COUNT(*) as c FROM applied_jobs WHERE user_id = ? AND applied_at >= ?",
+        (user_id, cutoff),
+    ).fetchone()["c"]
+
+    # Stage changes this week
+    stage_changes = conn.execute(
+        """SELECT st.job_key, st.from_stage, st.to_stage, st.transitioned_at,
+                  aj.title, aj.company
+           FROM stage_transitions st
+           LEFT JOIN applied_jobs aj ON aj.user_id = st.user_id AND aj.job_key = st.job_key
+           WHERE st.user_id = ? AND st.transitioned_at >= ?
+           ORDER BY st.transitioned_at DESC""",
+        (user_id, cutoff),
+    ).fetchall()
+
+    # Total applications
+    total_apps = conn.execute(
+        "SELECT COUNT(*) as c FROM applied_jobs WHERE user_id = ?",
+        (user_id,),
+    ).fetchone()["c"]
+
+    # Response rate (any stage change from 'applied')
+    total_applied = conn.execute(
+        "SELECT COUNT(*) as c FROM applied_jobs WHERE user_id = ? AND stage = 'applied'",
+        (user_id,),
+    ).fetchone()["c"]
+    responded = conn.execute(
+        "SELECT COUNT(*) as c FROM applied_jobs WHERE user_id = ? AND stage NOT IN ('applied', 'withdrawn')",
+        (user_id,),
+    ).fetchone()["c"]
+    response_rate = round(responded / total_apps * 100) if total_apps > 0 else 0
+
+    # Interviews scheduled
+    interviews = conn.execute(
+        "SELECT COUNT(*) as c FROM applied_jobs WHERE user_id = ? AND stage = 'interview'",
+        (user_id,),
+    ).fetchone()["c"]
+
+    # Upcoming follow-ups (next 7 days)
+    future = (datetime.utcnow() + timedelta(days=7)).strftime("%Y-%m-%d")
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    upcoming_followups = conn.execute(
+        """SELECT title, company, follow_up_date FROM applied_jobs
+           WHERE user_id = ? AND follow_up_date IS NOT NULL
+             AND follow_up_date >= ? AND follow_up_date <= ?
+             AND stage NOT IN ('rejected', 'withdrawn')
+           ORDER BY follow_up_date ASC""",
+        (user_id, today, future),
+    ).fetchall()
+
+    _safe_close(conn)
+
+    return {
+        "apps_this_week": apps_this_week,
+        "total_apps": total_apps,
+        "response_rate": response_rate,
+        "interviews": interviews,
+        "stage_changes": [dict(r) for r in stage_changes],
+        "upcoming_followups": [dict(r) for r in upcoming_followups],
+    }
+
+
+# --- Extension: My Jobs ---
+
+def get_user_applied_and_bookmarked_keys(user_id):
+    """Get applied job keys and bookmarked job keys for API extension endpoint."""
+    conn = get_db()
+    applied = conn.execute(
+        "SELECT job_key FROM applied_jobs WHERE user_id = ?", (user_id,)
+    ).fetchall()
+    bookmarked = conn.execute(
+        "SELECT job_key FROM bookmarked_jobs WHERE user_id = ?", (user_id,)
+    ).fetchall()
+    _safe_close(conn)
+    return {
+        "applied_keys": [r["job_key"] for r in applied],
+        "bookmarked_keys": [r["job_key"] for r in bookmarked],
+    }
+
+
+# --- User creation with OAuth (no password) ---
+
+def create_user_oauth(email, name=""):
+    """Create a user without a password (for OAuth login). Returns user_id or None."""
+    conn = get_db()
+    # Use a random unusable password hash
+    unusable_hash = "oauth_" + secrets.token_hex(32)
+    try:
+        cursor = conn.execute(
+            "INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)",
+            (email.lower().strip(), unusable_hash, name.strip()),
+        )
+        conn.commit()
+        user_id = cursor.lastrowid
+    except sqlite3.IntegrityError:
+        _safe_close(conn)
+        return None
+    _safe_close(conn)
+    return user_id

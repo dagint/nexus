@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Kanban Board{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Kanban Board</h2>
+    <div>
+        <a href="{{ url_for('pipeline') }}" class="btn btn-outline-secondary btn-sm">Table View</a>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">Dashboard</a>
+    </div>
+</div>
+
+<div class="kanban-board" style="display: flex; gap: 12px; overflow-x: auto; padding-bottom: 16px; min-height: 500px;">
+    {% for stage in stages %}
+    <div class="kanban-column" data-stage="{{ stage }}"
+         style="min-width: 240px; max-width: 280px; flex-shrink: 0; background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: 8px; display: flex; flex-direction: column;">
+
+        <div class="kanban-column-header px-3 py-2" style="border-bottom: 1px solid var(--bs-border-color); background: var(--bs-tertiary-bg); border-radius: 8px 8px 0 0;">
+            <div class="d-flex justify-content-between align-items-center">
+                <strong class="text-capitalize">{{ stage }}</strong>
+                <span class="badge bg-secondary">{{ columns.get(stage, [])|length }}</span>
+            </div>
+        </div>
+
+        <div class="kanban-cards px-2 py-2" data-stage="{{ stage }}"
+             style="flex: 1; overflow-y: auto; min-height: 100px;"
+             ondragover="event.preventDefault(); this.classList.add('bg-primary', 'bg-opacity-10');"
+             ondragleave="this.classList.remove('bg-primary', 'bg-opacity-10');"
+             ondrop="handleKanbanDrop(event, '{{ stage }}'); this.classList.remove('bg-primary', 'bg-opacity-10');">
+
+            {% for job in columns.get(stage, []) %}
+            <div class="card mb-2 kanban-card" draggable="true"
+                 data-job-key="{{ job.job_key }}"
+                 ondragstart="event.dataTransfer.setData('text/plain', '{{ job.job_key }}');"
+                 style="cursor: grab; font-size: 0.85rem;">
+                <div class="card-body p-2">
+                    <div class="fw-semibold mb-1" style="font-size: 0.8rem;">{{ job.title }}</div>
+                    <div class="text-muted small mb-1">{{ job.company }}</div>
+
+                    {% if job.days_in_stage is not none %}
+                    <div class="small">
+                        <span class="badge bg-{{ 'warning text-dark' if job.days_in_stage > 14 else 'light text-dark border' }}">
+                            {{ job.days_in_stage }}d in stage
+                        </span>
+                    </div>
+                    {% endif %}
+
+                    {% if job.follow_up_date %}
+                    <div class="small mt-1">
+                        {% if job.follow_up_date < today %}
+                        <span class="badge bg-danger">Follow-up overdue</span>
+                        {% else %}
+                        <span class="badge bg-light text-dark border">Follow-up: {{ job.follow_up_date }}</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    {% if job.contact_name %}
+                    <div class="small text-muted mt-1">Contact: {{ job.contact_name }}</div>
+                    {% endif %}
+
+                    <div class="mt-1">
+                        {% if job.apply_url %}
+                        <a href="{{ job.apply_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary py-0" style="font-size: 0.7rem;">Open</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+
+            {% if not columns.get(stage, []) %}
+            <div class="text-center text-muted small py-4" style="opacity: 0.5;">
+                Drop jobs here
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function handleKanbanDrop(event, newStage) {
+    event.preventDefault();
+    var jobKey = event.dataTransfer.getData('text/plain');
+    if (!jobKey) return;
+
+    csrfFetch('/jobs/' + jobKey + '/stage', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({stage: newStage})
+    })
+    .then(function(resp) { return resp.json(); })
+    .then(function(data) {
+        if (data.status === 'ok') {
+            location.reload();
+        }
+    })
+    .catch(function(err) {
+        alert('Failed to update stage: ' + err.message);
+    });
+}
+</script>
+{% endblock %}

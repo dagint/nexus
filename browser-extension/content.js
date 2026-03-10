@@ -410,10 +410,111 @@
     document.body.appendChild(btn);
   }
 
-  // Wait for page to be ready, then add button
+  // --- Auto-detect saved/applied jobs ---
+
+  function normalizeKey(title, company) {
+    return (title + "||" + company).toLowerCase().replace(/\s+/g, " ").trim();
+  }
+
+  function highlightSavedJobs() {
+    chrome.storage.sync.get(["serverUrl", "apiToken"], async (result) => {
+      const serverUrl = result.serverUrl;
+      const apiToken = result.apiToken;
+      if (!serverUrl || !apiToken) return;
+
+      try {
+        const res = await fetch(`${serverUrl}/api/extension/my-jobs`, {
+          headers: { "X-API-Token": apiToken },
+        });
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const appliedKeys = new Set((data.applied_keys || []).map(k => k.toLowerCase()));
+        const bookmarkedKeys = new Set((data.bookmarked_keys || []).map(k => k.toLowerCase()));
+
+        if (appliedKeys.size === 0 && bookmarkedKeys.size === 0) return;
+
+        // Find job cards on listing pages
+        let jobCards = [];
+
+        if (hostname.includes("linkedin.com")) {
+          jobCards = document.querySelectorAll(".job-card-container, .jobs-search-results__list-item, .scaffold-layout__list-item");
+        } else if (hostname.includes("indeed.com")) {
+          jobCards = document.querySelectorAll(".job_seen_beacon, .jobsearch-ResultsList .result, .cardOutline, [data-testid='slider_item']");
+        } else {
+          // Generic: look for common card patterns
+          jobCards = document.querySelectorAll("[class*='job-card'], [class*='JobCard'], [class*='job_card'], [class*='jobCard']");
+        }
+
+        jobCards.forEach((card) => {
+          const titleEl = card.querySelector("h3, h2, [class*='title'], [class*='Title']");
+          const companyEl = card.querySelector("[class*='company'], [class*='Company'], [class*='employer']");
+          if (!titleEl) return;
+
+          const title = (titleEl.innerText || "").trim();
+          const company = (companyEl?.innerText || "").trim();
+          if (!title) return;
+
+          // Check by matching against keys (job keys often contain title/company slugs)
+          const keyNorm = normalizeKey(title, company);
+          let matched = false;
+          let matchType = "";
+
+          for (const key of appliedKeys) {
+            if (key.includes(title.toLowerCase().substring(0, 20)) ||
+                keyNorm.includes(key.substring(0, 20))) {
+              matched = true;
+              matchType = "applied";
+              break;
+            }
+          }
+          if (!matched) {
+            for (const key of bookmarkedKeys) {
+              if (key.includes(title.toLowerCase().substring(0, 20)) ||
+                  keyNorm.includes(key.substring(0, 20))) {
+                matched = true;
+                matchType = "bookmarked";
+                break;
+              }
+            }
+          }
+
+          if (matched) {
+            card.style.borderLeft = matchType === "applied"
+              ? "4px solid #198754"
+              : "4px solid #0d6efd";
+            card.style.position = "relative";
+
+            // Add badge
+            const badge = document.createElement("span");
+            badge.textContent = matchType === "applied" ? "Applied" : "Saved";
+            badge.style.cssText = `
+              position:absolute;top:4px;right:4px;
+              background:${matchType === "applied" ? "#198754" : "#0d6efd"};
+              color:white;font-size:10px;padding:2px 6px;border-radius:3px;
+              font-weight:600;z-index:999;
+            `;
+            // Avoid duplicate badges
+            if (!card.querySelector(".nexus-badge")) {
+              badge.classList.add("nexus-badge");
+              card.appendChild(badge);
+            }
+          }
+        });
+      } catch (err) {
+        // Silently fail - auto-detect is best-effort
+      }
+    });
+  }
+
+  // Wait for page to be ready, then add button and highlight
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", createFloatingButton);
+    document.addEventListener("DOMContentLoaded", () => {
+      createFloatingButton();
+      setTimeout(highlightSavedJobs, 1500); // Wait for job cards to render
+    });
   } else {
     createFloatingButton();
+    setTimeout(highlightSavedJobs, 1500);
   }
 })();

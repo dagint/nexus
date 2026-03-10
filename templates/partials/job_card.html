@@ -113,6 +113,13 @@
         </p>
         {% endif %}
 
+        <!-- Salary badge -->
+        {% if job.salary_badge is defined and job.salary_badge %}
+        <span class="badge bg-{{ 'success' if job.salary_badge == 'Above Market' else 'danger' if job.salary_badge == 'Below Market' else 'secondary' }} mb-2">
+            {{ job.salary_badge }}
+        </span>
+        {% endif %}
+
         <!-- Company info -->
         {% if job.company_info %}
         <details class="mb-2">
@@ -123,6 +130,20 @@
                 {% if job.company_info.description %}<div>{{ job.company_info.description[:150] }}</div>{% endif %}
             </div>
         </details>
+        {% endif %}
+
+        <!-- Alternate sources (dedup provenance) -->
+        {% if job.alternate_sources %}
+        <div class="small text-muted mb-2">
+            Also found on:
+            {% for alt in job.alternate_sources %}
+            {% if alt.apply_url %}
+            <a href="{{ alt.apply_url }}" target="_blank" rel="noopener" class="badge bg-light text-dark border text-decoration-none">{{ alt.source }}</a>
+            {% else %}
+            <span class="badge bg-light text-dark border">{{ alt.source }}</span>
+            {% endif %}
+            {% endfor %}
+        </div>
         {% endif %}
 
         <!-- Footer -->
@@ -194,6 +215,11 @@
                         data-title="{{ job.title }}" data-company="{{ job.company }}"
                         data-description="{{ job.description[:2000] | e }}">
                     Prep
+                </button>
+                <button class="btn btn-sm btn-outline-success elevator-pitch-btn"
+                        data-title="{{ job.title }}" data-company="{{ job.company }}"
+                        data-description="{{ job.description[:2000] | e }}">
+                    Fit
                 </button>
                 <button class="btn btn-sm btn-outline-info linkedin-helper-btn"
                         data-title="{{ job.title }}" data-company="{{ job.company }}"

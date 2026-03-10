@@ -161,6 +161,57 @@ def send_password_reset_email(email, token, base_url):
         return False
 
 
+def send_weekly_report(email, stats, app=None):
+    """Send a weekly progress report email."""
+    if not _smtp_configured():
+        logger.warning("SMTP not configured, skipping weekly report to %s", email)
+        return False
+
+    try:
+        if app:
+            with app.app_context():
+                html = render_template("partials/weekly_report.html", stats=stats)
+        else:
+            html = _simple_weekly_html(stats)
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"Nexus Weekly Report: {stats.get('apps_this_week', 0)} applications this week"
+        msg["From"] = Config.SMTP_FROM
+        msg["To"] = email
+        msg.attach(MIMEText(html, "html"))
+        _send_email(msg)
+
+        logger.info("Sent weekly report to %s", email)
+        return True
+
+    except Exception as e:
+        logger.error("Failed to send weekly report to %s: %s", email, e)
+        return False
+
+
+def _simple_weekly_html(stats):
+    """Fallback HTML for weekly reports when templates are unavailable."""
+    apps = stats.get("apps_this_week", 0)
+    total = stats.get("total_apps", 0)
+    rate = stats.get("response_rate", 0)
+    interviews = stats.get("interviews", 0)
+
+    return f"""
+    <html><head><style>
+    @media (prefers-color-scheme: dark) {{
+        body {{ background-color: #1a1a2e !important; color: #e0e0e0 !important; }}
+    }}
+    </style></head>
+    <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+    <h2>Weekly Job Search Report</h2>
+    <p>Applications this week: <strong>{apps}</strong></p>
+    <p>Total applications: <strong>{total}</strong></p>
+    <p>Response rate: <strong>{rate}%</strong></p>
+    <p>Active interviews: <strong>{interviews}</strong></p>
+    <hr><p style="color:#999;font-size:12px">Sent by Nexus</p>
+    </body></html>"""
+
+
 def _simple_html(jobs, search_query):
     """Fallback HTML template for emails with dark mode support."""
     parts = []

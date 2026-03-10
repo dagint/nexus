@@ -1,12 +1,16 @@
 const serverUrlInput = document.getElementById("serverUrl");
+const apiTokenInput = document.getElementById("apiToken");
 const saveJobBtn = document.getElementById("saveJob");
 const openDashboardBtn = document.getElementById("openDashboard");
 const statusEl = document.getElementById("status");
 
-// Load saved server URL
-chrome.storage.sync.get(["serverUrl"], (result) => {
+// Load saved server URL and API token
+chrome.storage.sync.get(["serverUrl", "apiToken"], (result) => {
   if (result.serverUrl) {
     serverUrlInput.value = result.serverUrl;
+  }
+  if (result.apiToken) {
+    apiTokenInput.value = result.apiToken;
   }
 });
 
@@ -15,6 +19,13 @@ serverUrlInput.addEventListener("change", () => {
   const url = serverUrlInput.value.trim().replace(/\/+$/, "");
   serverUrlInput.value = url;
   chrome.storage.sync.set({ serverUrl: url });
+});
+
+// Save API token on change
+apiTokenInput.addEventListener("change", () => {
+  const token = apiTokenInput.value.trim();
+  apiTokenInput.value = token;
+  chrome.storage.sync.set({ apiToken: token });
 });
 
 function showStatus(message, type) {

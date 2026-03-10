@@ -40,8 +40,17 @@ def init_scheduler(app):
         id="check_follow_ups",
         replace_existing=True,
     )
+    scheduler.add_job(
+        func=lambda: _send_weekly_reports(app),
+        trigger="cron",
+        day_of_week="mon",
+        hour=9,
+        minute=0,
+        id="weekly_reports",
+        replace_existing=True,
+    )
     scheduler.start()
-    logger.info("Scheduler started - checking alerts every hour, follow-ups daily")
+    logger.info("Scheduler started - checking alerts every hour, follow-ups daily, weekly reports Mondays 9 AM")
 
 
 def _cleanup(app):
@@ -296,3 +305,26 @@ def _check_alerts(app):
             else:
                 logger.info("No new jobs for user %d across %d alerts",
                             user_id, len(user_alerts))
+
+
+def _send_weekly_reports(app):
+    """Send weekly progress reports to all opted-in users."""
+    with app.app_context():
+        try:
+            from database import get_weekly_report_users, get_user_weekly_stats
+            from services.notifier import send_weekly_report
+
+            users = get_weekly_report_users()
+            sent = 0
+            for user in users:
+                try:
+                    stats = get_user_weekly_stats(user["id"])
+                    send_weekly_report(user["email"], stats, app)
+                    sent += 1
+                except Exception as e:
+                    logger.warning("Failed to send weekly report to user %d: %s",
+                                   user["id"], e)
+
+            logger.info("Sent weekly reports to %d/%d users", sent, len(users))
+        except Exception as e:
+            logger.error("Weekly report job failed: %s", e)

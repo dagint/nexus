@@ -4,9 +4,10 @@ import json
 import logging
 import os
 import re
+import zipfile
 from datetime import datetime, timedelta
 
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, Response
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, Response, send_file, session
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -46,6 +47,14 @@ from database import (
     delete_team, share_job_with_team, get_team_shared_jobs, get_team_shared_job,
     add_team_job_comment, get_team_job_comments, get_team_activity,
     get_admin_stats, get_admin_users, is_user_admin,
+    get_cached_company, cache_company,
+    record_merge, get_merge_sources, get_merge_sources_batch,
+    get_stage_transitions, get_salary_benchmarks,
+    add_search_history_with_salary,
+    create_api_token, validate_api_token, get_api_tokens, delete_api_token,
+    get_user_applied_and_bookmarked_keys,
+    create_oauth_account, get_oauth_account, link_oauth_account, get_user_oauth_accounts,
+    create_user_oauth,
 )
 
 setup_logging()
@@ -153,9 +162,12 @@ def set_security_headers(response):
 
 @app.context_processor
 def inject_notification_count():
+    ctx = {"config": Config}
     if current_user.is_authenticated:
-        return {"notification_count": get_unread_count(current_user.id)}
-    return {"notification_count": 0}
+        ctx["notification_count"] = get_unread_count(current_user.id)
+    else:
+        ctx["notification_count"] = 0
+    return ctx
 
 
 # --- Error Handlers ---
@@ -632,9 +644,22 @@ def search():
     else:
         jobs = sort_within_tiers(jobs)
 
-    # Record search history (no notification on every search to avoid spam)
+    # Record search history with avg salary
     if current_user.is_authenticated:
-        add_search_history(current_user.id, query, location, remote_only, resume_id, len(jobs))
+        avg_salary = None
+        salary_vals = []
+        for j in jobs:
+            s_min = j.get("salary_annual_min") or j.get("salary_min")
+            s_max = j.get("salary_annual_max") or j.get("salary_max")
+            if s_min and s_max:
+                salary_vals.append((s_min + s_max) / 2)
+            elif s_min:
+                salary_vals.append(s_min)
+            elif s_max:
+                salary_vals.append(s_max)
+        if salary_vals:
+            avg_salary = sum(salary_vals) / len(salary_vals)
+        add_search_history_with_salary(current_user.id, query, location, remote_only, resume_id, len(jobs), avg_salary)
 
     # Pagination
     try:
@@ -792,6 +817,17 @@ def mark_job_applied(job_key):
         data.get("notes", ""), data.get("location", ""),
         data.get("apply_url", ""), data.get("stage", "applied"),
     )
+    # Store resume_id if provided
+    resume_id = data.get("resume_id")
+    if resume_id:
+        from database import get_db, _safe_close
+        conn = get_db()
+        conn.execute(
+            "UPDATE applied_jobs SET resume_id = ? WHERE user_id = ? AND job_key = ?",
+            (resume_id, current_user.id, job_key),
+        )
+        conn.commit()
+        _safe_close(conn)
     return jsonify({"status": "ok"})
 
 
@@ -1117,8 +1153,12 @@ def import_linkedin():
 @app.route("/history")
 @login_required
 def history():
+    from services.search_trends import get_search_trends, get_popular_searches
     searches = get_search_history(current_user.id)
-    return render_template("history.html", searches=searches)
+    trends = get_search_trends(current_user.id, days=90)
+    popular = get_popular_searches(current_user.id, limit=10)
+    return render_template("history.html", searches=searches, trends=trends, popular=popular,
+                           show_trends=False)
 
 
 # --- Dashboard ---
@@ -1172,7 +1212,18 @@ def settings():
         except (json.JSONDecodeError, TypeError):
             pass
 
-    return render_template("settings.html", settings=user_settings, api_status=api_status, scoring_weights=scoring_weights)
+    # API tokens
+    api_tokens_list = get_api_tokens(current_user.id)
+    new_token = session.pop("new_api_token", None)
+
+    # OAuth accounts
+    oauth_accounts = get_user_oauth_accounts(current_user.id)
+    google_oauth_available = bool(Config.GOOGLE_CLIENT_ID)
+
+    return render_template("settings.html", settings=user_settings, api_status=api_status,
+                           scoring_weights=scoring_weights, api_tokens=api_tokens_list,
+                           new_token=new_token, oauth_accounts=oauth_accounts,
+                           google_oauth_available=google_oauth_available)
 
 
 @app.route("/settings", methods=["POST"])
@@ -1186,6 +1237,7 @@ def save_settings():
         "experience": min(_safe_int(request.form.get("weight_experience"), 50), 100),
         "remote": min(_safe_int(request.form.get("weight_remote"), 50), 100),
     })
+    weekly_report = 1 if request.form.get("weekly_report_enabled") else 0
     update_user_settings(
         current_user.id,
         name=request.form.get("name", ""),
@@ -1196,6 +1248,7 @@ def save_settings():
         blocked_keywords=request.form.get("blocked_keywords", ""),
         blocked_locations=request.form.get("blocked_locations", ""),
         scoring_weights=scoring_weights,
+        weekly_report_enabled=weekly_report,
     )
     flash("Settings saved.", "success")
     return redirect(url_for("settings"))
@@ -1264,10 +1317,23 @@ def job_detail(job_key):
         except Exception as e:
             logger.warning("Description snapshot failed: %s", e)
 
+    # Load company research summary if available
+    company_summary = None
+    if job.get("company"):
+        cached = get_cached_company(job["company"])
+        if cached and isinstance(cached, dict) and "ai_summary" in cached:
+            company_summary = cached["ai_summary"]
+
+    # Load alternate sources from merge records
+    merge_sources = get_merge_sources(job.get("job_key", ""))
+    if merge_sources and not job.get("alternate_sources"):
+        job["alternate_sources"] = [{"source": m["source_name"], "apply_url": m.get("source_url")} for m in merge_sources]
+
     return render_template(
         "job_detail.html", job=job,
         applied_keys=applied_keys, bookmarked_keys=bookmarked_keys, dismissed_keys=dismissed_keys,
         has_description_changes=has_changes,
+        company_summary=company_summary,
     )
 
 
@@ -1310,16 +1376,6 @@ def job_description_diff(job_key):
         "old_date": old_date,
         "new_date": new_date,
     })
-
-
-# --- Analytics ---
-
-@app.route("/analytics")
-@login_required
-def analytics():
-    from services.analytics import get_search_analytics
-    data = get_search_analytics(current_user.id)
-    return render_template("analytics.html", analytics=data)
 
 
 # --- Interview Prep ---
@@ -2029,6 +2085,430 @@ def team_job_comments_list(tid, jid):
     return jsonify({"comments": comments})
 
 
+# --- Elevator Pitch ---
+
+@app.route("/jobs/elevator-pitch", methods=["POST"])
+@login_required
+@limiter.limit("10 per minute")
+def elevator_pitch():
+    from services.elevator_pitch import generate_elevator_pitch
+    data = request.get_json() or {}
+
+    job_title = data.get("title", "")
+    company = data.get("company", "")
+    job_description = data.get("description", "")
+
+    default = get_default_resume(current_user.id)
+    if not default:
+        return jsonify({"error": "No resume saved. Upload a resume first."}), 400
+
+    result = generate_elevator_pitch(
+        default["raw_text"], job_title, company, job_description,
+        user_id=current_user.id,
+    )
+    return jsonify(result)
+
+
+# --- Company Research ---
+
+@app.route("/jobs/company-research", methods=["POST"])
+@login_required
+@limiter.limit("10 per minute")
+def company_research():
+    from services.company_enricher import generate_company_summary
+    data = request.get_json() or {}
+    company_name = data.get("company", "").strip()
+
+    if not company_name:
+        return jsonify({"error": "Company name is required."}), 400
+
+    # Check existing cached data
+    existing = get_cached_company(company_name)
+
+    # Generate AI summary
+    summary = generate_company_summary(company_name, existing)
+
+    # Store enhanced data in company_cache
+    enhanced = existing or {}
+    enhanced["ai_summary"] = summary
+    cache_company(company_name, enhanced)
+
+    return jsonify(summary)
+
+
+# --- Kanban Board ---
+
+@app.route("/kanban")
+@login_required
+def kanban():
+    applied = get_applied_jobs(current_user.id)
+    kanban_stages = ["saved", "applied", "screen", "interview", "offer", "rejected", "withdrawn"]
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    # Group jobs by stage
+    columns = {stage: [] for stage in kanban_stages}
+    for job in applied:
+        job_dict = dict(job)
+        stage = job_dict.get("stage", "applied")
+        if stage not in columns:
+            columns[stage] = []
+        # Compute days in stage
+        updated = job_dict.get("updated_at", "")
+        if updated:
+            try:
+                updated_dt = datetime.strptime(updated[:10], "%Y-%m-%d")
+                job_dict["days_in_stage"] = (datetime.now() - updated_dt).days
+            except (ValueError, TypeError):
+                job_dict["days_in_stage"] = None
+        else:
+            job_dict["days_in_stage"] = None
+
+        # Get contacts for the job (just first contact name)
+        contacts = get_job_contacts(current_user.id, job_dict["job_key"])
+        job_dict["contact_name"] = contacts[0]["name"] if contacts else None
+        columns[stage].append(job_dict)
+
+    return render_template("kanban.html", columns=columns, stages=kanban_stages, today=today)
+
+
+# --- Search History Trends ---
+
+@app.route("/history/trends")
+@login_required
+def history_trends():
+    from services.search_trends import get_search_trends, get_popular_searches
+    query_filter = request.args.get("query", "")
+    days = _safe_int(request.args.get("days", "90"), 90)
+
+    trends = get_search_trends(current_user.id, query=query_filter or None, days=days)
+    popular = get_popular_searches(current_user.id, limit=10)
+    searches = get_search_history(current_user.id)
+
+    return render_template("history.html", searches=searches, trends=trends, popular=popular,
+                           query_filter=query_filter, days=days, show_trends=True)
+
+
+# --- Enhanced Analytics ---
+
+@app.route("/analytics")
+@login_required
+def analytics():
+    from services.analytics import get_search_analytics, get_response_rates, get_funnel_metrics
+    data = get_search_analytics(current_user.id)
+    response_rates = get_response_rates(current_user.id)
+    funnel = get_funnel_metrics(current_user.id)
+
+    # Salary benchmarks
+    benchmarks = get_salary_benchmarks(current_user.id)
+
+    return render_template("analytics.html", analytics=data, response_rates=response_rates,
+                           funnel=funnel, salary_benchmarks=benchmarks)
+
+
+# --- API Tokens ---
+
+@app.route("/settings/api-tokens", methods=["POST"])
+@login_required
+def create_api_token_route():
+    token, tid = create_api_token(current_user.id)
+    session["new_api_token"] = token
+    flash("API token created. Copy it now; it won't be shown again.", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/api-tokens/<int:tid>/delete", methods=["POST"])
+@login_required
+def delete_api_token_route(tid):
+    delete_api_token(tid, current_user.id)
+    flash("API token revoked.", "success")
+    return redirect(url_for("settings"))
+
+
+# --- Extension API ---
+
+@app.route("/api/extension/my-jobs")
+@csrf.exempt
+def extension_my_jobs():
+    """Return applied/bookmarked job keys for the browser extension. Token auth required."""
+    token = request.headers.get("X-API-Token", "")
+    if not token:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            token = auth[7:]
+    if not token:
+        return jsonify({"error": "Missing API token"}), 401
+
+    user_id = validate_api_token(token)
+    if not user_id:
+        return jsonify({"error": "Invalid API token"}), 401
+
+    data = get_user_applied_and_bookmarked_keys(user_id)
+    return jsonify(data)
+
+
+# --- Email Import ---
+
+@app.route("/jobs/import-email", methods=["GET"])
+@login_required
+def import_email():
+    return render_template("import_email.html", parsed=None, email_text=None, stages=PIPELINE_STAGES)
+
+
+@app.route("/jobs/import-email", methods=["POST"])
+@login_required
+def import_email_post():
+    step = request.form.get("step", "parse")
+    email_text = request.form.get("email_text", "")
+
+    if step == "parse":
+        from services.email_parser import parse_recruiter_email
+        parsed = parse_recruiter_email(email_text)
+        return render_template("import_email.html", parsed=parsed, email_text=email_text, stages=PIPELINE_STAGES)
+
+    elif step == "confirm":
+        title = request.form.get("job_title", "").strip()
+        company = request.form.get("company", "").strip()
+        location = request.form.get("location", "").strip()
+        stage = request.form.get("stage", "applied")
+        notes = request.form.get("notes", "").strip()
+
+        if not title or not company:
+            flash("Job title and company are required.", "error")
+            return redirect(url_for("import_email"))
+
+        # Generate a job key from title + company
+        job_key = re.sub(r'[^a-z0-9]+', '-', f"{title}-{company}".lower()).strip('-')
+
+        # Create pipeline entry
+        mark_applied(current_user.id, job_key, title, company,
+                     notes=notes, location=location, stage=stage)
+
+        # Add recruiter contact if provided
+        r_name = request.form.get("recruiter_name", "").strip()
+        r_email = request.form.get("recruiter_email", "").strip()
+        r_phone = request.form.get("recruiter_phone", "").strip()
+
+        if r_name or r_email or r_phone:
+            add_job_contact(current_user.id, job_key,
+                            name=r_name, email=r_email, phone=r_phone,
+                            role="Recruiter")
+
+        flash(f"Imported '{title}' at {company} to pipeline.", "success")
+        return redirect(url_for("pipeline"))
+
+    return redirect(url_for("import_email"))
+
+
+# --- Data Export ---
+
+@app.route("/export/full")
+@login_required
+def export_full():
+    """Export all user data as a ZIP file."""
+    user_id = current_user.id
+    buf = io.BytesIO()
+
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        # Applied jobs
+        applied = get_applied_jobs(user_id)
+        csv_buf = io.StringIO()
+        if applied:
+            writer = csv.DictWriter(csv_buf, fieldnames=dict(applied[0]).keys())
+            writer.writeheader()
+            for row in applied:
+                writer.writerow(dict(row))
+        zf.writestr("applied_jobs.csv", csv_buf.getvalue())
+
+        # Bookmarked jobs
+        bookmarked = get_bookmarked_jobs(user_id)
+        csv_buf = io.StringIO()
+        if bookmarked:
+            writer = csv.DictWriter(csv_buf, fieldnames=dict(bookmarked[0]).keys())
+            writer.writeheader()
+            for row in bookmarked:
+                writer.writerow(dict(row))
+        zf.writestr("bookmarked_jobs.csv", csv_buf.getvalue())
+
+        # Search history
+        history = get_search_history(user_id, limit=1000)
+        csv_buf = io.StringIO()
+        if history:
+            writer = csv.DictWriter(csv_buf, fieldnames=dict(history[0]).keys())
+            writer.writeheader()
+            for row in history:
+                writer.writerow(dict(row))
+        zf.writestr("search_history.csv", csv_buf.getvalue())
+
+        # Resumes (text only)
+        resumes = get_resumes(user_id)
+        csv_buf = io.StringIO()
+        if resumes:
+            fields = ["id", "name", "raw_text", "skills_json", "is_default", "created_at", "updated_at"]
+            writer = csv.DictWriter(csv_buf, fieldnames=fields)
+            writer.writeheader()
+            for r in resumes:
+                rd = dict(r)
+                writer.writerow({k: rd.get(k, "") for k in fields})
+        zf.writestr("resumes.csv", csv_buf.getvalue())
+
+        # Contacts
+        from database import get_db, _safe_close
+        conn = get_db()
+        contacts = conn.execute(
+            "SELECT * FROM job_contacts WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,),
+        ).fetchall()
+        _safe_close(conn)
+        csv_buf = io.StringIO()
+        if contacts:
+            writer = csv.DictWriter(csv_buf, fieldnames=dict(contacts[0]).keys())
+            writer.writeheader()
+            for row in contacts:
+                writer.writerow(dict(row))
+        zf.writestr("contacts.csv", csv_buf.getvalue())
+
+        # Settings
+        user_settings = get_user_settings(user_id)
+        zf.writestr("settings.json", json.dumps(user_settings, indent=2, default=str))
+
+    buf.seek(0)
+    return send_file(
+        buf,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=f"nexus-export-{datetime.utcnow().strftime('%Y%m%d')}.zip",
+    )
+
+
+# --- API Documentation ---
+
+@app.route("/api/docs")
+@login_required
+def api_docs():
+    return render_template("api_docs.html")
+
+
+# --- Google OAuth ---
+
+@app.route("/auth/google")
+def google_login():
+    """Redirect to Google OAuth consent screen."""
+    if not Config.GOOGLE_CLIENT_ID:
+        flash("Google login is not configured.", "error")
+        return redirect(url_for("login"))
+
+    import secrets as _secrets
+    state = _secrets.token_urlsafe(32)
+    session["oauth_state"] = state
+
+    params = {
+        "client_id": Config.GOOGLE_CLIENT_ID,
+        "redirect_uri": Config.GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "state": state,
+    }
+    query = "&".join(f"{k}={v}" for k, v in params.items())
+    return redirect(f"https://accounts.google.com/o/oauth2/v2/auth?{query}")
+
+
+@app.route("/auth/google/callback")
+def google_callback():
+    """Handle Google OAuth callback."""
+    if not Config.GOOGLE_CLIENT_ID:
+        flash("Google login is not configured.", "error")
+        return redirect(url_for("login"))
+
+    error = request.args.get("error")
+    if error:
+        flash(f"Google login failed: {error}", "error")
+        return redirect(url_for("login"))
+
+    code = request.args.get("code")
+    state = request.args.get("state")
+
+    # Verify state
+    if state != session.pop("oauth_state", None):
+        flash("Invalid OAuth state. Please try again.", "error")
+        return redirect(url_for("login"))
+
+    if not code:
+        flash("No authorization code received.", "error")
+        return redirect(url_for("login"))
+
+    try:
+        import requests as _requests
+
+        # Exchange code for token
+        token_response = _requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": Config.GOOGLE_CLIENT_ID,
+                "client_secret": Config.GOOGLE_CLIENT_SECRET,
+                "redirect_uri": Config.GOOGLE_REDIRECT_URI,
+                "grant_type": "authorization_code",
+            },
+            timeout=10,
+        )
+        token_response.raise_for_status()
+        tokens = token_response.json()
+
+        # Get user info
+        userinfo_response = _requests.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {tokens['access_token']}"},
+            timeout=10,
+        )
+        userinfo_response.raise_for_status()
+        userinfo = userinfo_response.json()
+
+        google_id = userinfo.get("id")
+        email = userinfo.get("email", "").lower()
+        name = userinfo.get("name", "")
+
+        if not google_id or not email:
+            flash("Could not retrieve your Google account info.", "error")
+            return redirect(url_for("login"))
+
+        # Check if OAuth account exists
+        oauth_acc = get_oauth_account("google", google_id)
+        if oauth_acc:
+            # Existing OAuth link - log in
+            user_data = get_user_by_id(oauth_acc["user_id"])
+            if user_data:
+                login_user(User(user_data), remember=True)
+                flash("Logged in with Google.", "success")
+                return redirect(url_for("index"))
+
+        # Check if user with this email already exists
+        existing_user = get_user_by_email(email)
+        if existing_user:
+            # Link Google to existing account
+            link_oauth_account(existing_user["id"], "google", google_id, email)
+            login_user(User(existing_user), remember=True)
+            flash("Google account linked and logged in.", "success")
+            return redirect(url_for("index"))
+
+        # Create new user
+        user_id = create_user_oauth(email, name)
+        if user_id:
+            create_oauth_account(user_id, "google", google_id, email)
+            user_data = get_user_by_id(user_id)
+            login_user(User(user_data), remember=True)
+            flash("Account created with Google. Welcome!", "success")
+            return redirect(url_for("index"))
+        else:
+            flash("Failed to create account.", "error")
+            return redirect(url_for("login"))
+
+    except Exception as e:
+        logger.error("Google OAuth failed: %s", e)
+        flash("Google login failed. Please try again.", "error")
+        return redirect(url_for("login"))
+
+
 # --- Admin ---
 
 def admin_required(f):
@@ -2069,6 +2549,11 @@ with app.app_context():
     warnings = Config.validate()
     for w in warnings:
         logger.warning(w)
+
+# Register API v1 blueprint
+from api_v1 import api_v1
+app.register_blueprint(api_v1)
+csrf.exempt(api_v1)
 
 from scheduler import init_scheduler
 init_scheduler(app)

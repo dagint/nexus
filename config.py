@@ -28,6 +28,11 @@ class Config:
     OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
     OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "")  # e.g., "llama3", "mistral", "gemma2"
 
+    # Google OAuth
+    GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:5000/auth/google/callback")
+
     # Database
     DB_PATH = os.getenv("DB_PATH", os.path.join("data", "db", "jobs.db"))
 
@@ -49,4 +54,6 @@ class Config:
             warnings.append("SMTP credentials not set - email notifications will be unavailable")
         if not cls.ANTHROPIC_API_KEY and not cls.OLLAMA_MODEL:
             warnings.append("No AI provider configured (set ANTHROPIC_API_KEY or OLLAMA_MODEL) - will use heuristic matching")
+        if not cls.GOOGLE_CLIENT_ID or not cls.GOOGLE_CLIENT_SECRET:
+            warnings.append("Google OAuth credentials not set - Google login will be unavailable")
         return warnings

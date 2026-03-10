@@ -804,6 +804,56 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+    // --- Elevator Pitch (Why I'm a Fit) ---
+    document.querySelectorAll(".elevator-pitch-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            var title = this.dataset.title || "";
+            var company = this.dataset.company || "";
+            var description = this.dataset.description || "";
+            var originalText = this.textContent;
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>...';
+
+            csrfFetch("/jobs/elevator-pitch", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: title, company: company, description: description }),
+            })
+                .then(function (resp) { return resp.json().then(function (data) { return { ok: resp.ok, data: data }; }); })
+                .then(function (result) {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+
+                    if (!result.ok) {
+                        alert(result.data.error || "Failed to generate pitch.");
+                        return;
+                    }
+
+                    document.getElementById("elevatorPitchContent").textContent = result.data.pitch || "";
+                    var modal = new bootstrap.Modal(document.getElementById("elevatorPitchModal"));
+                    modal.show();
+                })
+                .catch(function (err) {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                    alert("Error: " + err.message);
+                });
+        });
+    });
+
+    // Copy elevator pitch
+    var copyPitchBtn = document.getElementById("copyElevatorPitch");
+    if (copyPitchBtn) {
+        copyPitchBtn.addEventListener("click", function () {
+            var content = document.getElementById("elevatorPitchContent").textContent;
+            navigator.clipboard.writeText(content).then(function () {
+                copyPitchBtn.textContent = "Copied!";
+                setTimeout(function () { copyPitchBtn.textContent = "Copy to Clipboard"; }, 2000);
+            });
+        });
+    }
+
     // --- LinkedIn Helper ---
     document.querySelectorAll(".linkedin-helper-btn").forEach(function (btn) {
         btn.addEventListener("click", function () {

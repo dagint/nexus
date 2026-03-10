@@ -1,0 +1,89 @@
+<html>
+<head>
+<style>
+    @media (prefers-color-scheme: dark) {
+        body { background-color: #1a1a2e !important; color: #e0e0e0 !important; }
+        h2, h3 { color: #e0e0e0 !important; }
+        .stat-card { background: #16213e !important; border-color: #2a2a4a !important; }
+        .stat-value { color: #75b798 !important; }
+        td { border-bottom-color: #2a2a4a !important; }
+        .tip-box { background: #16213e !important; border-color: #2a2a4a !important; }
+        a { color: #64b5f6 !important; }
+    }
+</style>
+</head>
+<body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background-color:#ffffff;color:#333333">
+    <h2 style="color:#333">Weekly Job Search Report</h2>
+    <p style="color:#666">Here's a summary of your job search activity this week.</p>
+
+    <!-- Summary Stats -->
+    <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+        <tr>
+            <td class="stat-card" style="padding:12px;text-align:center;border:1px solid #dee2e6;border-radius:8px;width:25%">
+                <div class="stat-value" style="font-size:24px;font-weight:bold;color:#0d6efd">{{ stats.apps_this_week }}</div>
+                <div style="font-size:12px;color:#666">Applications<br>This Week</div>
+            </td>
+            <td style="width:4%"></td>
+            <td class="stat-card" style="padding:12px;text-align:center;border:1px solid #dee2e6;border-radius:8px;width:25%">
+                <div class="stat-value" style="font-size:24px;font-weight:bold;color:#198754">{{ stats.interviews }}</div>
+                <div style="font-size:12px;color:#666">Interviews<br>Scheduled</div>
+            </td>
+            <td style="width:4%"></td>
+            <td class="stat-card" style="padding:12px;text-align:center;border:1px solid #dee2e6;border-radius:8px;width:25%">
+                <div class="stat-value" style="font-size:24px;font-weight:bold;color:#6f42c1">{{ stats.response_rate }}%</div>
+                <div style="font-size:12px;color:#666">Response<br>Rate</div>
+            </td>
+        </tr>
+    </table>
+
+    <!-- Stage Changes -->
+    {% if stats.stage_changes %}
+    <h3 style="font-size:16px;margin-bottom:8px">Stage Changes</h3>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+        {% for change in stats.stage_changes[:10] %}
+        <tr>
+            <td style="padding:8px;border-bottom:1px solid #eee">
+                <strong>{{ change.title or 'Untitled' }}</strong> at {{ change.company or 'Unknown' }}<br>
+                <small style="color:#666">
+                    {% if change.from_stage %}
+                        {{ change.from_stage }} &rarr; {{ change.to_stage }}
+                    {% else %}
+                        Added as {{ change.to_stage }}
+                    {% endif %}
+                </small>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+
+    <!-- Upcoming Follow-ups -->
+    {% if stats.upcoming_followups %}
+    <h3 style="font-size:16px;margin-bottom:8px">Upcoming Follow-ups (Next 7 Days)</h3>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+        {% for fu in stats.upcoming_followups %}
+        <tr>
+            <td style="padding:8px;border-bottom:1px solid #eee">
+                <strong>{{ fu.title or 'Untitled' }}</strong> at {{ fu.company or 'Unknown' }}<br>
+                <small style="color:#666">Follow up: {{ fu.follow_up_date }}</small>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+
+    <!-- Quick Tips -->
+    <div class="tip-box" style="padding:12px;background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;margin-bottom:20px">
+        {% if stats.apps_this_week == 0 %}
+        <p style="margin:0;font-size:14px">You haven't applied to any jobs this week. Consider setting aside dedicated time for applications to keep your search momentum going.</p>
+        {% elif stats.apps_this_week >= 5 %}
+        <p style="margin:0;font-size:14px">Great progress! You've submitted {{ stats.apps_this_week }} applications this week. Keep up the momentum and make sure to follow up on earlier applications.</p>
+        {% else %}
+        <p style="margin:0;font-size:14px">Good work! You've submitted {{ stats.apps_this_week }} applications this week. Try to maintain a consistent application pace for best results.</p>
+        {% endif %}
+    </div>
+
+    <hr style="border:none;border-top:1px solid #dee2e6;margin:20px 0">
+    <p style="color:#999;font-size:12px;text-align:center">Sent by Nexus. You can disable weekly reports in Settings.</p>
+</body>
+</html>
