@@ -12,7 +12,7 @@ class RemotiveProvider(JobAPIProvider):
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10),
            retry=retry_if_exception_type((requests.exceptions.ConnectionError, requests.exceptions.Timeout)))
-    def search(self, query, location, remote_only, date_posted, page):
+    def search(self, query, location, remote_only, date_posted, page, employment_type=""):
         resp = requests.get(
             "https://remotive.com/api/remote-jobs",
             params={"search": query, "limit": 20},

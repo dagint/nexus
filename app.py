@@ -398,6 +398,7 @@ def search():
     location = ""
     remote_only = False
     date_posted = "month"
+    employment_type = ""
     use_ai = False
     resume_id = None
 
@@ -435,6 +436,7 @@ def search():
         location = request.form.get("location", "").strip()
         remote_only = bool(request.form.get("remote_only"))
         date_posted = request.form.get("date_posted", "month")
+        employment_type = request.form.get("employment_type", "")
         use_ai = bool(request.form.get("use_ai"))
 
         # Save resume if user is logged in and uploaded new one
@@ -448,6 +450,7 @@ def search():
         location = request.args.get("location", "").strip()
         remote_only = request.args.get("remote_only") == "true"
         date_posted = request.args.get("date_posted", "month")
+        employment_type = request.args.get("employment_type", "")
 
         # Use saved resume for GET re-searches
         if current_user.is_authenticated and not resume_data:
@@ -486,7 +489,7 @@ def search():
 
     # Search
     try:
-        jobs = search_all(query, location, remote_only, date_posted)
+        jobs = search_all(query, location, remote_only, date_posted, employment_type=employment_type)
     except Exception as e:
         logger.error("Search failed: %s", e)
         flash("Search encountered an error. Some results may be missing.", "warning")

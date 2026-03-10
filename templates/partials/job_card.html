@@ -48,6 +48,10 @@
                 <span class="badge bg-primary">Quick Apply</span>
                 {% endif %}
 
+                {% if job.employment_type %}
+                <span class="badge bg-outline-primary border border-primary text-primary small">{{ job.employment_type | replace('fulltime', 'Full-time') | replace('parttime', 'Part-time') | replace('contract', 'Contract') | replace('internship', 'Internship') }}</span>
+                {% endif %}
+
                 {% if job.is_stale %}
                 <span class="badge bg-secondary">Stale</span>
                 {% endif %}

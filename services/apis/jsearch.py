@@ -15,9 +15,16 @@ class JSearchProvider(JobAPIProvider):
     def is_available(self):
         return bool(Config.RAPIDAPI_KEY)
 
+    EMPLOYMENT_TYPE_MAP = {
+        "fulltime": "FULLTIME",
+        "parttime": "PARTTIME",
+        "contract": "CONTRACTOR",
+        "internship": "INTERN",
+    }
+
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10),
            retry=retry_if_exception_type((requests.exceptions.ConnectionError, requests.exceptions.Timeout, APIError)))
-    def search(self, query, location, remote_only, date_posted, page):
+    def search(self, query, location, remote_only, date_posted, page, employment_type=""):
         params = {
             "query": f"{query} in {location}" if location else query,
             "page": str(page),
@@ -26,6 +33,8 @@ class JSearchProvider(JobAPIProvider):
         }
         if remote_only:
             params["remote_jobs_only"] = "true"
+        if employment_type and employment_type in self.EMPLOYMENT_TYPE_MAP:
+            params["employment_types"] = self.EMPLOYMENT_TYPE_MAP[employment_type]
 
         headers = {
             "X-RapidAPI-Key": Config.RAPIDAPI_KEY,
@@ -52,5 +61,12 @@ class JSearchProvider(JobAPIProvider):
                 "salary_min": item.get("job_min_salary"),
                 "salary_max": item.get("job_max_salary"),
                 "posted_date": item.get("job_posted_at_datetime_utc", ""),
+                "employment_type": self._parse_employment_type(item.get("job_employment_type", "")),
             }))
         return results
+
+    @staticmethod
+    def _parse_employment_type(raw):
+        mapping = {"FULLTIME": "fulltime", "PARTTIME": "parttime",
+                    "CONTRACTOR": "contract", "INTERN": "internship"}
+        return mapping.get(raw, "")
