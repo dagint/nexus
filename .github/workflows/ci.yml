@@ -80,7 +80,7 @@ jobs:
           docker stop test-app
 
       - name: Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.30.0
         with:
           image-ref: ${{ env.DOCKER_IMAGE }}:scan
           format: table
@@ -89,7 +89,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Trivy SARIF scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.30.0
         if: always()
         with:
           image-ref: ${{ env.DOCKER_IMAGE }}:scan
@@ -99,7 +99,7 @@ jobs:
 
       - name: Upload Trivy SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: always() && hashFiles('trivy-results.sarif') != ''
         with:
           sarif_file: trivy-results.sarif
 
