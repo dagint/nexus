@@ -61,6 +61,22 @@
                                value="{{ settings.blocked_companies or '' }}"
                                placeholder="e.g., Acme Corp, Bad Company">
                     </div>
+
+                    <div class="mb-3">
+                        <label for="blocked_keywords" class="form-label">Blocked Keywords (comma-separated)</label>
+                        <input type="text" class="form-control" id="blocked_keywords" name="blocked_keywords"
+                               value="{{ settings.blocked_keywords or '' }}"
+                               placeholder="e.g., blockchain, crypto, clearance required">
+                        <div class="form-text">Jobs with these keywords in title or description will be hidden from search results.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="blocked_locations" class="form-label">Blocked Locations (comma-separated)</label>
+                        <input type="text" class="form-control" id="blocked_locations" name="blocked_locations"
+                               value="{{ settings.blocked_locations or '' }}"
+                               placeholder="e.g., San Francisco, Austin">
+                        <div class="form-text">Jobs in these locations will be hidden from search results.</div>
+                    </div>
                 </div>
             </div>
 

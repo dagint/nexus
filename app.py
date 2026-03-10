@@ -33,6 +33,11 @@ from database import (
     get_role_velocity,
     dismiss_job, undismiss_job, get_dismissed_job_keys,
     get_api_usage_summary, get_api_usage_daily, get_api_usage_recent,
+    get_search_templates, create_search_template, delete_search_template,
+    add_job_contact, get_job_contacts, update_job_contact, delete_job_contact,
+    update_follow_up_date,
+    get_cached_interview_prep, save_interview_prep, get_all_interview_preps,
+    get_interview_prep_by_id, delete_interview_prep,
 )
 
 setup_logging()
@@ -302,9 +307,18 @@ def health():
 @app.route("/")
 def index():
     saved_resumes = []
+    user_id = None
     if current_user.is_authenticated:
         saved_resumes = get_resumes(current_user.id)
-    return render_template("index.html", saved_resumes=saved_resumes)
+        user_id = current_user.id
+    templates = get_search_templates(user_id)
+    # Group templates by category
+    templates_by_category = {}
+    for t in templates:
+        cat = t.get("category") or "Other"
+        templates_by_category.setdefault(cat, []).append(t)
+    return render_template("index.html", saved_resumes=saved_resumes,
+                           templates=templates, templates_by_category=templates_by_category)
 
 
 @app.route("/search", methods=["GET", "POST"])
@@ -447,10 +461,56 @@ def search():
     except Exception as e:
         logger.warning("Company enrichment failed: %s", e)
 
-    # Fetch user settings once for commute + scoring
+    # Fetch user settings once for commute + scoring + filtering
     user_settings = None
     if current_user.is_authenticated:
         user_settings = get_user_settings(current_user.id)
+
+    # Apply negative filters (blocked keywords, locations, companies)
+    if user_settings:
+        # Parse blocked companies
+        blocked_companies_raw = user_settings.get("blocked_companies", "") or ""
+        blocked_companies = [c.strip().lower() for c in blocked_companies_raw.split(",") if c.strip()]
+
+        # Parse blocked keywords
+        blocked_keywords_raw = user_settings.get("blocked_keywords", "") or "[]"
+        if blocked_keywords_raw.startswith("["):
+            try:
+                blocked_keywords = [k.strip().lower() for k in json.loads(blocked_keywords_raw) if k.strip()]
+            except (json.JSONDecodeError, TypeError):
+                blocked_keywords = []
+        else:
+            blocked_keywords = [k.strip().lower() for k in blocked_keywords_raw.split(",") if k.strip()]
+
+        # Parse blocked locations
+        blocked_locations_raw = user_settings.get("blocked_locations", "") or "[]"
+        if blocked_locations_raw.startswith("["):
+            try:
+                blocked_locations = [l.strip().lower() for l in json.loads(blocked_locations_raw) if l.strip()]
+            except (json.JSONDecodeError, TypeError):
+                blocked_locations = []
+        else:
+            blocked_locations = [l.strip().lower() for l in blocked_locations_raw.split(",") if l.strip()]
+
+        if blocked_companies or blocked_keywords or blocked_locations:
+            filtered = []
+            for job in jobs:
+                title_lower = (job.get("title") or "").lower()
+                desc_lower = (job.get("description") or "").lower()
+                company_lower = (job.get("company") or "").lower()
+                location_lower = (job.get("location") or "").lower()
+
+                # Check blocked companies
+                if any(bc in company_lower for bc in blocked_companies):
+                    continue
+                # Check blocked keywords in title or description
+                if any(bk in title_lower or bk in desc_lower for bk in blocked_keywords):
+                    continue
+                # Check blocked locations (partial match)
+                if any(bl in location_lower for bl in blocked_locations):
+                    continue
+                filtered.append(job)
+            jobs = filtered
 
     # Commute check for non-remote jobs
     if user_settings and location:
@@ -1040,6 +1100,8 @@ def save_settings():
         max_commute_minutes=min(_safe_int(request.form.get("max_commute_minutes"), 60), 999),
         seniority_tier=request.form.get("seniority_tier", ""),
         blocked_companies=request.form.get("blocked_companies", ""),
+        blocked_keywords=request.form.get("blocked_keywords", ""),
+        blocked_locations=request.form.get("blocked_locations", ""),
     )
     flash("Settings saved.", "success")
     return redirect(url_for("settings"))
@@ -1123,17 +1185,31 @@ def interview_prep():
     from services.interview_prep import generate_interview_prep
     data = request.get_json() or {}
 
+    job_title = data.get("title", "")
+    company = data.get("company", "")
+    job_description = data.get("description", "")
+    job_key = data.get("job_key", "")
+
+    # Check cache first
+    cached = get_cached_interview_prep(current_user.id, company, job_title)
+    if cached:
+        return jsonify(cached["prep"])
+
     default = get_default_resume(current_user.id)
     if not default:
         return jsonify({"error": "No resume saved. Upload a resume first."}), 400
 
     result = generate_interview_prep(
         default["raw_text"],
-        data.get("title", ""),
-        data.get("company", ""),
-        data.get("description", ""),
+        job_title,
+        company,
+        job_description,
         user_name=current_user.name,
     )
+
+    # Save to cache
+    save_interview_prep(current_user.id, company, job_title, job_key, result)
+
     return jsonify(result)
 
 
@@ -1246,6 +1322,108 @@ def usage():
         total_cost=total_cost, total_calls=total_calls,
         days=days,
     )
+
+
+# --- Search Templates ---
+
+@app.route("/templates/search", methods=["GET"])
+def list_search_templates():
+    user_id = current_user.id if current_user.is_authenticated else None
+    templates = get_search_templates(user_id)
+    return jsonify({"templates": templates})
+
+
+@app.route("/templates/search", methods=["POST"])
+@login_required
+def create_search_template_route():
+    data = request.get_json() or {}
+    name = (data.get("name") or "").strip()
+    query = (data.get("query") or "").strip()
+    if not name or not query:
+        return jsonify({"error": "Name and query are required."}), 400
+    tid = create_search_template(
+        current_user.id,
+        name=name,
+        query=query,
+        location=data.get("location", ""),
+        remote_only=bool(data.get("remote_only")),
+        description=data.get("description", ""),
+        category=data.get("category", "Custom"),
+    )
+    return jsonify({"status": "ok", "id": tid})
+
+
+@app.route("/templates/search/<int:tid>/delete", methods=["POST"])
+@login_required
+def delete_search_template_route(tid):
+    delete_search_template(tid, current_user.id)
+    return jsonify({"status": "ok"})
+
+
+# --- Job Contacts ---
+
+@app.route("/jobs/<job_key>/contacts", methods=["POST"])
+@login_required
+def add_contact(job_key):
+    data = request.get_json() or {}
+    cid = add_job_contact(
+        current_user.id, job_key,
+        name=data.get("name", ""),
+        email=data.get("email", ""),
+        phone=data.get("phone", ""),
+        role=data.get("role", ""),
+        notes=data.get("notes", ""),
+    )
+    return jsonify({"status": "ok", "id": cid})
+
+
+@app.route("/jobs/<job_key>/contacts", methods=["GET"])
+@login_required
+def list_contacts(job_key):
+    contacts = get_job_contacts(current_user.id, job_key)
+    return jsonify({"contacts": contacts})
+
+
+@app.route("/jobs/<job_key>/contacts/<int:cid>", methods=["DELETE"])
+@login_required
+def remove_contact(job_key, cid):
+    delete_job_contact(cid, current_user.id)
+    return jsonify({"status": "ok"})
+
+
+@app.route("/jobs/<job_key>/follow-up", methods=["POST"])
+@login_required
+def set_follow_up(job_key):
+    data = request.get_json() or {}
+    update_follow_up_date(current_user.id, job_key, data.get("follow_up_date", ""))
+    return jsonify({"status": "ok"})
+
+
+# --- Interview Prep Persistence ---
+
+@app.route("/interview-prep")
+@login_required
+def interview_prep_list():
+    preps = get_all_interview_preps(current_user.id)
+    return render_template("interview_prep.html", preps=preps)
+
+
+@app.route("/interview-prep/<int:pid>")
+@login_required
+def interview_prep_detail(pid):
+    prep = get_interview_prep_by_id(pid, current_user.id)
+    if not prep:
+        flash("Interview prep not found.", "error")
+        return redirect(url_for("interview_prep_list"))
+    return render_template("interview_prep_detail.html", prep=prep)
+
+
+@app.route("/interview-prep/<int:pid>/delete", methods=["POST"])
+@login_required
+def interview_prep_delete(pid):
+    delete_interview_prep(pid, current_user.id)
+    flash("Interview prep deleted.", "success")
+    return redirect(url_for("interview_prep_list"))
 
 
 # --- Startup ---

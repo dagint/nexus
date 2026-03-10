@@ -34,7 +34,8 @@
                 <th>Company</th>
                 <th>Stage</th>
                 <th>Applied</th>
-                <th>Notes</th>
+                <th>Follow-up</th>
+                <th>Details</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -55,15 +56,76 @@
                 </td>
                 <td><small>{{ job.applied_at[:10] if job.applied_at else '' }}</small></td>
                 <td>
-                    <input type="text" class="form-control form-control-sm notes-input" data-job-key="{{ job.job_key }}"
-                           value="{{ job.notes or '' }}" placeholder="Add notes..."
-                           style="min-width: 150px">
+                    <input type="date" class="form-control form-control-sm follow-up-input"
+                           data-job-key="{{ job.job_key }}"
+                           value="{{ job.follow_up_date or '' }}"
+                           style="width: 140px">
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-outline-info" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#details-{{ loop.index }}"
+                            aria-expanded="false">
+                        Expand
+                    </button>
                 </td>
                 <td>
                     {% if job.apply_url %}
                     <a href="{{ job.apply_url }}" target="_blank" class="btn btn-sm btn-outline-primary">Open</a>
                     {% endif %}
                     <button class="btn btn-sm btn-outline-danger remove-btn" data-job-key="{{ job.job_key }}">Remove</button>
+                </td>
+            </tr>
+            <tr class="collapse" id="details-{{ loop.index }}">
+                <td colspan="7" class="bg-body-tertiary">
+                    <div class="p-2">
+                        <div class="row">
+                            <!-- Notes -->
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-semibold">Notes</label>
+                                <textarea class="form-control form-control-sm notes-input" data-job-key="{{ job.job_key }}"
+                                          rows="3" placeholder="Add notes...">{{ job.notes or '' }}</textarea>
+                            </div>
+                            <!-- Contacts -->
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-semibold">Contacts</label>
+                                <div id="contacts-{{ loop.index }}" data-job-key="{{ job.job_key }}">
+                                    <table class="table table-sm table-bordered mb-2">
+                                        <thead>
+                                            <tr>
+                                                <th>Name</th>
+                                                <th>Email</th>
+                                                <th>Role</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="contacts-list">
+                                            <tr><td colspan="4" class="text-muted small">Loading...</td></tr>
+                                        </tbody>
+                                    </table>
+                                    <button class="btn btn-sm btn-outline-success add-contact-toggle" type="button"
+                                            data-bs-toggle="collapse" data-bs-target="#addContact-{{ loop.index }}">
+                                        + Add Contact
+                                    </button>
+                                    <div class="collapse mt-2" id="addContact-{{ loop.index }}">
+                                        <div class="row g-2">
+                                            <div class="col-md-4">
+                                                <input type="text" class="form-control form-control-sm contact-name" placeholder="Name">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <input type="email" class="form-control form-control-sm contact-email" placeholder="Email">
+                                            </div>
+                                            <div class="col-md-3">
+                                                <input type="text" class="form-control form-control-sm contact-role" placeholder="Role">
+                                            </div>
+                                            <div class="col-md-1">
+                                                <button class="btn btn-sm btn-success save-contact-btn" data-job-key="{{ job.job_key }}" data-index="{{ loop.index }}">Save</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </td>
             </tr>
             {% endfor %}
@@ -77,9 +139,10 @@
 
 {% block scripts %}
 <script>
+// Stage select
 document.querySelectorAll('.stage-select').forEach(function(select) {
     select.addEventListener('change', function() {
-        fetch('/jobs/' + this.dataset.jobKey + '/stage', {
+        csrfFetch('/jobs/' + this.dataset.jobKey + '/stage', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({stage: this.value})
@@ -87,13 +150,14 @@ document.querySelectorAll('.stage-select').forEach(function(select) {
     });
 });
 
+// Notes auto-save
 document.querySelectorAll('.notes-input').forEach(function(input) {
     var timeout;
     input.addEventListener('input', function() {
         var el = this;
         clearTimeout(timeout);
         timeout = setTimeout(function() {
-            fetch('/jobs/' + el.dataset.jobKey + '/notes', {
+            csrfFetch('/jobs/' + el.dataset.jobKey + '/notes', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({notes: el.value})
@@ -102,12 +166,98 @@ document.querySelectorAll('.notes-input').forEach(function(input) {
     });
 });
 
+// Follow-up date
+document.querySelectorAll('.follow-up-input').forEach(function(input) {
+    input.addEventListener('change', function() {
+        csrfFetch('/jobs/' + this.dataset.jobKey + '/follow-up', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({follow_up_date: this.value})
+        });
+    });
+});
+
+// Remove button
 document.querySelectorAll('.remove-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
         if (confirm('Remove this application?')) {
-            fetch('/jobs/' + this.dataset.jobKey + '/applied', {method: 'DELETE'})
+            csrfFetch('/jobs/' + this.dataset.jobKey + '/applied', {method: 'DELETE'})
                 .then(function() { location.reload(); });
         }
+    });
+});
+
+// Load contacts when expanding a row
+document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var target = document.querySelector(this.dataset.bsTarget);
+        if (!target) return;
+        var contactsDiv = target.querySelector('[id^="contacts-"]');
+        if (!contactsDiv || contactsDiv.dataset.loaded) return;
+        var jobKey = contactsDiv.dataset.jobKey;
+        loadContacts(contactsDiv, jobKey);
+        contactsDiv.dataset.loaded = '1';
+    });
+});
+
+function loadContacts(container, jobKey) {
+    var tbody = container.querySelector('.contacts-list');
+    csrfFetch('/jobs/' + jobKey + '/contacts')
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+            if (!data.contacts || data.contacts.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-muted small">No contacts yet.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = '';
+            data.contacts.forEach(function(c) {
+                var tr = document.createElement('tr');
+                tr.innerHTML =
+                    '<td>' + (c.name || '') + '</td>' +
+                    '<td>' + (c.email ? '<a href="mailto:' + c.email + '">' + c.email + '</a>' : '') + '</td>' +
+                    '<td>' + (c.role || '') + '</td>' +
+                    '<td><button class="btn btn-sm btn-outline-danger delete-contact" data-cid="' + c.id + '" data-job-key="' + jobKey + '">X</button></td>';
+                tbody.appendChild(tr);
+            });
+            // Attach delete handlers
+            tbody.querySelectorAll('.delete-contact').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var cid = this.dataset.cid;
+                    var jk = this.dataset.jobKey;
+                    csrfFetch('/jobs/' + jk + '/contacts/' + cid, {method: 'DELETE'})
+                        .then(function() { loadContacts(container, jobKey); });
+                });
+            });
+        });
+}
+
+// Save contact
+document.querySelectorAll('.save-contact-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var jobKey = this.dataset.jobKey;
+        var idx = this.dataset.index;
+        var addForm = document.getElementById('addContact-' + idx);
+        var name = addForm.querySelector('.contact-name').value.trim();
+        var email = addForm.querySelector('.contact-email').value.trim();
+        var role = addForm.querySelector('.contact-role').value.trim();
+
+        if (!name && !email) { alert('Please enter at least a name or email.'); return; }
+
+        csrfFetch('/jobs/' + jobKey + '/contacts', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: name, email: email, role: role})
+        })
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+            if (data.status === 'ok') {
+                addForm.querySelector('.contact-name').value = '';
+                addForm.querySelector('.contact-email').value = '';
+                addForm.querySelector('.contact-role').value = '';
+                var container = document.getElementById('contacts-' + idx);
+                loadContacts(container, jobKey);
+            }
+        });
     });
 });
 </script>
