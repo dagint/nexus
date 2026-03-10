@@ -10,13 +10,13 @@ def test_health(client):
 def test_index(client):
     resp = client.get("/")
     assert resp.status_code == 200
-    assert b"Find Your Next Job" in resp.data
+    assert b"Find Your Next Role" in resp.data
 
 
 def test_search_no_input(client):
     resp = client.post("/search", data={}, follow_redirects=True)
     assert resp.status_code == 200
-    assert b"Please provide" in resp.data or b"Find Your Next Job" in resp.data
+    assert b"Please provide" in resp.data or b"Find Your Next Role" in resp.data
 
 
 def test_search_with_text(client):
@@ -34,7 +34,7 @@ def test_bad_file_upload(client):
     resp = client.post("/search", data=data, content_type="multipart/form-data",
                        follow_redirects=True)
     assert resp.status_code == 200
-    assert b"Invalid file type" in resp.data or b"Find Your Next Job" in resp.data
+    assert b"Invalid file type" in resp.data or b"Find Your Next Role" in resp.data
 
 
 # --- Auth ---

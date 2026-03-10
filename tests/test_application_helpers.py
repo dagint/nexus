@@ -124,27 +124,18 @@ class TestScreeningAnswererHeuristic:
 
 
 class TestScreeningAnswererWithClaude:
-    @patch("services.screening_answerer.Config")
-    def test_claude_api_called(self, mock_config):
-        mock_config.ANTHROPIC_API_KEY = "test-key"
+    @patch("services.ai_client.call")
+    @patch("services.ai_client.is_available", return_value=True)
+    def test_claude_api_called(self, mock_available, mock_call):
+        mock_call.return_value = "1. I have 8 years of experience.\n2. I am very interested."
 
-        mock_message = MagicMock()
-        mock_message.content = [MagicMock(text="1. I have 8 years of experience.\n2. I am very interested.")]
-
-        mock_client = MagicMock()
-        mock_client.messages.create.return_value = mock_message
-
-        mock_anthropic = MagicMock()
-        mock_anthropic.Anthropic.return_value = mock_client
-
-        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
-            results = generate_screening_answers(
-                SAMPLE_RESUME, "Engineer", "Acme", SAMPLE_JOB_DESC,
-                ["How many years of experience?", "Why are you interested?"]
-            )
-            assert len(results) == 2
-            assert "8 years" in results[0]["answer"]
-            mock_client.messages.create.assert_called_once()
+        results = generate_screening_answers(
+            SAMPLE_RESUME, "Engineer", "Acme", SAMPLE_JOB_DESC,
+            ["How many years of experience?", "Why are you interested?"]
+        )
+        assert len(results) == 2
+        assert "8 years" in results[0]["answer"]
+        mock_call.assert_called_once()
 
 
 # --- Application Drafter Tests ---
@@ -196,12 +187,10 @@ class TestApplicationDrafterHeuristic:
 
 
 class TestApplicationDrafterWithClaude:
-    @patch("services.application_drafter.Config")
-    def test_claude_api_called(self, mock_config):
-        mock_config.ANTHROPIC_API_KEY = "test-key"
-
-        mock_message = MagicMock()
-        mock_message.content = [MagicMock(text="""SUMMARY:
+    @patch("services.ai_client.call")
+    @patch("services.ai_client.is_available", return_value=True)
+    def test_claude_api_called(self, mock_available, mock_call):
+        mock_call.return_value = """SUMMARY:
 A talented engineer with Python and AWS skills.
 
 KEY_QUALIFICATIONS:
@@ -219,20 +208,13 @@ SKILLS_HIGHLIGHT:
 
 EXPERIENCE_HIGHLIGHT:
 - Led microservices development
-- Built data pipelines""")]
+- Built data pipelines"""
 
-        mock_client = MagicMock()
-        mock_client.messages.create.return_value = mock_message
-
-        mock_anthropic = MagicMock()
-        mock_anthropic.Anthropic.return_value = mock_client
-
-        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
-            result = generate_application_draft(
-                SAMPLE_RESUME, {"skills": ["Python"]},
-                "Engineer", "Acme", SAMPLE_JOB_DESC
-            )
-            assert "talented engineer" in result["summary"].lower()
-            assert len(result["key_qualifications"]) == 3
-            assert "Python" in result["skills_highlight"]
-            mock_client.messages.create.assert_called_once()
+        result = generate_application_draft(
+            SAMPLE_RESUME, {"skills": ["Python"]},
+            "Engineer", "Acme", SAMPLE_JOB_DESC
+        )
+        assert "talented engineer" in result["summary"].lower()
+        assert len(result["key_qualifications"]) == 3
+        assert "Python" in result["skills_highlight"]
+        mock_call.assert_called_once()
