@@ -1,19 +1,23 @@
 {% extends "base.html" %}
 
-{% block title %}Job Search - Upload Resume{% endblock %}
+{% block title %}Job Search - Find Your Next Role{% endblock %}
 
 {% block content %}
+<div class="hero-section">
+    <div class="container">
+        <h1>Find Your Next Role</h1>
+        <p>Upload your resume and let AI match you with the best opportunities from multiple job boards.</p>
+    </div>
+</div>
+
 <div class="row justify-content-center">
     <div class="col-lg-8">
-        <h1 class="mb-4">Find Your Next Job</h1>
-        <p class="text-muted mb-4">Upload your resume or paste it below, and we'll find matching job listings from multiple sources.</p>
-
         <form method="POST" action="/search" enctype="multipart/form-data" id="searchForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
             <div class="card mb-4">
                 <div class="card-header">
-                    <h5 class="mb-0">Resume</h5>
+                    <h5 class="mb-0">Your Resume</h5>
                 </div>
                 <div class="card-body">
                     {% if saved_resumes %}
@@ -28,21 +32,22 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="text-center text-muted mb-3">— OR —</div>
+                    <div class="text-center text-muted mb-3"><small>or</small></div>
                     {% endif %}
 
                     <div class="mb-3">
-                        <label for="resume_file" class="form-label">Upload Resume (PDF, DOCX, or LinkedIn export, max 5MB)</label>
+                        <label for="resume_file" class="form-label">Upload Resume</label>
                         <input type="file" class="form-control" id="resume_file" name="resume_file"
                                accept=".pdf,.docx">
+                        <div class="form-text">PDF, DOCX, or LinkedIn export (max 5MB)</div>
                     </div>
 
-                    <div class="text-center text-muted mb-3">— OR —</div>
+                    <div class="text-center text-muted mb-3"><small>or</small></div>
 
                     <div class="mb-3">
                         <label for="resume_text" class="form-label">Paste Resume Text</label>
                         <textarea class="form-control" id="resume_text" name="resume_text"
-                                  rows="6" placeholder="Paste your resume content here..."></textarea>
+                                  rows="5" placeholder="Paste your resume content here..."></textarea>
                     </div>
                 </div>
             </div>
@@ -54,9 +59,10 @@
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label for="query" class="form-label">Job Title / Keywords (optional override)</label>
+                            <label for="query" class="form-label">Job Title / Keywords</label>
                             <input type="text" class="form-control" id="query" name="query"
-                                   placeholder="e.g., Software Engineer, Nurse, Marketing Manager">
+                                   placeholder="e.g., Software Engineer, Data Analyst">
+                            <div class="form-text">Optional — overrides resume-based keywords</div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="location" class="form-label">Location</label>
@@ -92,20 +98,20 @@
                 </div>
             </div>
 
-            <div class="d-grid">
+            <div class="d-grid mb-4">
                 <button type="submit" class="btn btn-primary btn-lg" id="searchBtn">
                     Search Jobs
                 </button>
             </div>
         </form>
 
-        <div class="mt-4">
-            <h6>Supported Job Sources</h6>
-            <div class="d-flex gap-2 flex-wrap">
-                <span class="badge bg-secondary">JSearch (RapidAPI)</span>
-                <span class="badge bg-secondary">Remotive</span>
-                <span class="badge bg-secondary">We Work Remotely</span>
-                <span class="badge bg-secondary">Adzuna</span>
+        <div class="text-center mb-4">
+            <p class="text-muted small mb-2">Searching across multiple job boards</p>
+            <div class="d-flex gap-2 flex-wrap justify-content-center source-list">
+                <span class="badge bg-light text-dark border">JSearch</span>
+                <span class="badge bg-light text-dark border">Remotive</span>
+                <span class="badge bg-light text-dark border">We Work Remotely</span>
+                <span class="badge bg-light text-dark border">Adzuna</span>
             </div>
         </div>
     </div>

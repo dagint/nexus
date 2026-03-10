@@ -16,6 +16,7 @@ from services.apis.jsearch import JSearchProvider
 from services.apis.remotive import RemotiveProvider
 from services.apis.weworkremotely import WeWorkRemotelyProvider
 from services.apis.adzuna import AdzunaProvider
+from services.apis.serpapi import SerpApiProvider
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ PROVIDER_CLASSES: list[type[JobAPIProvider]] = [
     RemotiveProvider,
     WeWorkRemotelyProvider,
     AdzunaProvider,
+    SerpApiProvider,
 ]
 
 

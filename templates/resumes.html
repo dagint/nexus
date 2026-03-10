@@ -27,6 +27,7 @@
             </small>
         </div>
         <div class="d-flex gap-2">
+            <a href="/resumes/{{ resume.id }}" class="btn btn-sm btn-outline-primary">View</a>
             <a href="/resumes/{{ resume.id }}/versions" class="btn btn-sm btn-outline-info">History</a>
             {% if not resume.is_default %}
             <form method="POST" action="/resumes/{{ resume.id }}/default" class="d-inline">

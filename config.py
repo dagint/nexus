@@ -14,6 +14,7 @@ class Config:
     RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")
     ADZUNA_APP_ID = os.getenv("ADZUNA_APP_ID", "")
     ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY", "")
+    SERPAPI_KEY = os.getenv("SERPAPI_KEY", "")
 
     # SMTP
     SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
@@ -22,8 +23,10 @@ class Config:
     SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
     SMTP_FROM = os.getenv("SMTP_FROM", "")
 
-    # Intelligence
+    # Intelligence — Claude API (cloud) or Ollama (local)
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+    OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "")  # e.g., "llama3", "mistral", "gemma2"
 
     # Database
     DB_PATH = os.getenv("DB_PATH", os.path.join("data", "db", "jobs.db"))
@@ -40,8 +43,10 @@ class Config:
             warnings.append("RAPIDAPI_KEY not set - JSearch API will be unavailable")
         if not cls.ADZUNA_APP_ID or not cls.ADZUNA_APP_KEY:
             warnings.append("Adzuna credentials not set - Adzuna API will be unavailable")
+        if not cls.SERPAPI_KEY:
+            warnings.append("SERPAPI_KEY not set - SerpApi (Google Jobs) will be unavailable")
         if not cls.SMTP_USER or not cls.SMTP_PASSWORD:
             warnings.append("SMTP credentials not set - email notifications will be unavailable")
-        if not cls.ANTHROPIC_API_KEY:
-            warnings.append("ANTHROPIC_API_KEY not set - will use heuristic matching instead of AI")
+        if not cls.ANTHROPIC_API_KEY and not cls.OLLAMA_MODEL:
+            warnings.append("No AI provider configured (set ANTHROPIC_API_KEY or OLLAMA_MODEL) - will use heuristic matching")
         return warnings

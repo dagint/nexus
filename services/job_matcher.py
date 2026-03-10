@@ -86,9 +86,9 @@ def score_jobs(jobs, resume_data, user_prefs=None, preference_profile=None):
 
 def generate_match_summary(job, resume_data):
     """Generate a summary of why this job matches. Uses Claude for strong matches."""
-    from config import Config
+    from services.ai_client import is_available
 
-    if Config.ANTHROPIC_API_KEY and job.get("match_tier") == "strong":
+    if is_available() and job.get("match_tier") == "strong":
         try:
             return _claude_summary(job, resume_data)
         except Exception as e:
@@ -102,10 +102,7 @@ def generate_match_summary(job, resume_data):
 
 
 def _claude_summary(job, resume_data):
-    import anthropic
-    from config import Config
-
-    client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
+    from services.ai_client import call
 
     skills_list = _get_skill_names(resume_data)
     titles_list = resume_data.get("job_titles", []) + resume_data.get("inferred_titles", [])
@@ -122,12 +119,7 @@ Match Score: {job.get('match_score', 0)}/100
 
 Return ONLY the paragraph, no preamble."""
 
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=200,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return message.content[0].text.strip()
+    return call(prompt, model="claude-haiku-4-5-20251001", max_tokens=200)
 
 
 def _get_skill_names(resume_data):
@@ -231,36 +223,29 @@ def _score_title(job, resume_data):
 
 def _claude_title_match(job_title, resume_titles):
     """Use Claude to assess title relevance for ambiguous cases."""
-    from config import Config
+    from services.ai_client import is_available, call
 
-    if not Config.ANTHROPIC_API_KEY:
+    if not is_available():
         return None
 
-    try:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
-        prompt = f"""Rate the relevance of this job title to a candidate with these titles on a scale of 0-30.
+    prompt = f"""Rate the relevance of this job title to a candidate with these titles on a scale of 0-30.
 Return ONLY a JSON object: {{"score": <number>, "reason": "<brief reason>"}}
 
 Job title: {job_title}
 Candidate titles: {', '.join(resume_titles[:5])}"""
 
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=100,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        response_text = message.content[0].text
-        json_match = re.search(r"\{[\s\S]*\}", response_text)
-        if json_match:
-            result = json.loads(json_match.group())
-            score = min(int(result.get("score", 0)), 30)
-            reason = result.get("reason", "AI-assessed title match")
-            if score >= 10:
-                return score, [reason]
-    except Exception as e:
-        logger.warning("Claude title match failed: %s", e)
+    response_text = call(prompt, model="claude-haiku-4-5-20251001", max_tokens=100)
+    if response_text:
+        try:
+            json_match = re.search(r"\{[\s\S]*\}", response_text)
+            if json_match:
+                result = json.loads(json_match.group())
+                score = min(int(result.get("score", 0)), 30)
+                reason = result.get("reason", "AI-assessed title match")
+                if score >= 10:
+                    return score, [reason]
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning("Failed to parse Claude title match response: %s", e)
 
     return None
 

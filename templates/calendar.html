@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Interview Calendar - JobSearch{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Interview Calendar</h2>
+
+<!-- Upcoming Interviews -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Upcoming Interviews</h5>
+        <a href="{{ url_for('pipeline') }}" class="btn btn-sm btn-outline-primary">View Pipeline</a>
+    </div>
+    <div class="card-body">
+        {% if interviews %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Job Title</th>
+                        <th>Company</th>
+                        <th>Notes</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for interview in interviews %}
+                    <tr>
+                        <td><strong>{{ interview.title }}</strong></td>
+                        <td>{{ interview.company }}</td>
+                        <td>
+                            <small class="text-muted">{{ interview.notes or 'No notes' }}</small>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('download_ics', job_key=interview.job_key) }}"
+                               class="btn btn-sm btn-outline-primary">Download .ics</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <h5>No upcoming interviews</h5>
+            <p>Move jobs to the "Interview" stage in your pipeline to see them here.</p>
+            <a href="{{ url_for('pipeline') }}" class="btn btn-sm btn-outline-primary">Go to Pipeline</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Schedule New Interview -->
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0">Schedule Interview</h5></div>
+    <div class="card-body">
+        {% if all_applied_jobs %}
+        <form method="POST" action="{{ url_for('schedule_interview') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label" for="job_key">Select Job</label>
+                    <select class="form-select" id="job_key" name="job_key" required>
+                        <option value="">Choose a job...</option>
+                        {% for job in all_applied_jobs %}
+                        <option value="{{ job.job_key }}">{{ job.title }} - {{ job.company }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="interview_date">Date</label>
+                    <input type="date" class="form-control" id="interview_date" name="interview_date" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="interview_time">Time</label>
+                    <input type="time" class="form-control" id="interview_time" name="interview_time" required>
+                </div>
+                <div class="col-12">
+                    <label class="form-label" for="interview_notes">Notes</label>
+                    <textarea class="form-control" id="interview_notes" name="interview_notes" rows="2"
+                              placeholder="e.g., Video call link, interviewer name, topics to prepare..."></textarea>
+                </div>
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary">Schedule Interview</button>
+                </div>
+            </div>
+        </form>
+        {% else %}
+        <p class="text-muted mb-0">No applied jobs found. Mark a job as applied first, then you can schedule interviews.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

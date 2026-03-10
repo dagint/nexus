@@ -182,6 +182,11 @@
                         data-description="{{ job.description[:2000] | e }}">
                     Draft
                 </button>
+                <button class="btn btn-sm btn-outline-secondary interview-prep-btn"
+                        data-title="{{ job.title }}" data-company="{{ job.company }}"
+                        data-description="{{ job.description[:2000] | e }}">
+                    Prep
+                </button>
                 {% endif %}
 
                 <button class="btn btn-sm btn-outline-dark share-btn"

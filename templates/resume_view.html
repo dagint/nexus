@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}{{ resume.name }} - JobSearch{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-1">{{ resume.name }}</h2>
+        <p class="text-muted mb-0">
+            {% if resume.filename %}File: {{ resume.filename }} | {% endif %}
+            Uploaded: {{ resume.created_at[:16] }}
+            {% if resume.is_default %}<span class="badge bg-primary ms-2">Default</span>{% endif %}
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('resumes') }}" class="btn btn-outline-secondary">Back to Resumes</a>
+        {% if not resume.is_default %}
+        <form method="POST" action="/resumes/{{ resume.id }}/default" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-primary">Set as Default</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+{% if skills %}
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0">Extracted Skills</h5></div>
+    <div class="card-body">
+        <div class="d-flex flex-wrap gap-1">
+            {% for skill in skills %}
+            {% if skill is mapping %}
+            <span class="badge bg-primary">{{ skill.skill }}{% if skill.weight %} ({{ (skill.weight * 100)|int }}%){% endif %}</span>
+            {% else %}
+            <span class="badge bg-primary">{{ skill }}</span>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Resume Content</h5>
+            <button class="btn btn-sm btn-outline-secondary" onclick="copyResume()">Copy Text</button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div id="resumeText" style="white-space: pre-wrap; font-size: 0.9rem; line-height: 1.7;">{{ resume.raw_text }}</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyResume() {
+    var text = document.getElementById('resumeText').innerText;
+    navigator.clipboard.writeText(text).then(function() {
+        alert('Resume text copied to clipboard.');
+    });
+}
+</script>
+{% endblock %}

@@ -82,10 +82,12 @@
     <!-- Main Results -->
     <div class="col-lg-9">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h4>
-                {{ total_jobs }} results for "{{ query }}"
-                {% if location %} in {{ location }}{% endif %}
-            </h4>
+            <div>
+                <h4 class="mb-0">{{ total_jobs }} results</h4>
+                <p class="text-muted small mb-0">
+                    "{{ query }}"{% if location %} in {{ location }}{% endif %}
+                </p>
+            </div>
             <div class="d-flex gap-2 align-items-center">
                 {% for src in unavailable_sources %}
                 <span class="badge bg-warning text-dark" title="API key not configured">{{ src }} unavailable</span>

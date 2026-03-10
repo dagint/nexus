@@ -82,9 +82,17 @@ def estimate_commute(job_location, user_location, max_commute_minutes=60):
 
 
 def check_commute_for_jobs(jobs, user_location, max_commute_minutes=60):
-    """Add commute info to a list of jobs."""
+    """Add commute info to a list of jobs. Limits geocoding to avoid timeouts."""
     if not user_location:
         return jobs
+
+    # Pre-geocode user location once
+    user_coords = _geocode(user_location)
+    if not user_coords:
+        return jobs
+
+    geocoded_count = 0
+    max_geocode = 10  # Limit to avoid slow requests
 
     for job in jobs:
         if job.get("remote_status") == "remote":
@@ -92,6 +100,15 @@ def check_commute_for_jobs(jobs, user_location, max_commute_minutes=60):
             continue
 
         job_location = job.get("location", "")
+        if not job_location or job_location.lower() in ("remote", "anywhere"):
+            job["commute_info"] = None
+            continue
+
+        if geocoded_count >= max_geocode:
+            job["commute_info"] = None
+            continue
+
+        geocoded_count += 1
         commute = estimate_commute(job_location, user_location, max_commute_minutes)
         job["commute_info"] = commute
 

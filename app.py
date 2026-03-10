@@ -75,10 +75,10 @@ def set_security_headers(response):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-        "script-src 'self' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; "
-        "font-src 'self' https://cdn.jsdelivr.net;"
+        "font-src 'self';"
     )
     return response
 
@@ -88,6 +88,18 @@ def inject_notification_count():
     if current_user.is_authenticated:
         return {"notification_count": get_unread_count(current_user.id)}
     return {"notification_count": 0}
+
+
+# --- Error Handlers ---
+
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template("404.html"), 404
+
+
+@app.errorhandler(500)
+def internal_server_error(e):
+    return render_template("500.html"), 500
 
 
 # --- Auth Routes ---
@@ -434,9 +446,10 @@ def search():
             user_prefs["remote_only"] = True
         jobs = score_jobs(jobs, resume_data, user_prefs, preference_profile)
 
-        for job in jobs[:5]:
-            if job.get("match_tier") == "strong":
-                job["match_summary"] = generate_match_summary(job, resume_data)
+        # Generate heuristic summaries only (AI summaries are on-demand via button)
+        for job in jobs:
+            if job.get("match_tier") == "strong" and job.get("match_reasons"):
+                job["match_summary"] = "Matches your profile: " + "; ".join(job["match_reasons"][:3]) + "."
 
     # Role velocity signal
     from database import get_role_velocity
@@ -734,9 +747,6 @@ def generate_cover_letter_route():
         user_name=current_user.name
     )
 
-    if letter is None:
-        return jsonify({"error": "Cover letter generation unavailable. Configure ANTHROPIC_API_KEY."}), 503
-
     return jsonify({"cover_letter": letter})
 
 
@@ -815,6 +825,23 @@ def set_resume_default(rid):
     set_default_resume(rid, current_user.id)
     flash("Default resume updated.", "success")
     return redirect(url_for("resumes"))
+
+
+@app.route("/resumes/<int:rid>")
+@login_required
+def view_resume(rid):
+    resume = get_resume(rid, current_user.id)
+    if not resume:
+        flash("Resume not found.", "error")
+        return redirect(url_for("resumes"))
+    skills = []
+    if resume.get("skills_json"):
+        try:
+            skills_data = json.loads(resume["skills_json"])
+            skills = skills_data.get("skills", skills_data) if isinstance(skills_data, dict) else skills_data
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return render_template("resume_view.html", resume=resume, skills=skills)
 
 
 @app.route("/resumes/<int:rid>/delete", methods=["POST"])
@@ -999,6 +1026,160 @@ def read_notifications():
     ids = data.get("ids")
     mark_notifications_read(current_user.id, ids)
     return jsonify({"status": "ok"})
+
+
+# --- Job Detail ---
+
+@app.route("/jobs/<job_key>")
+def job_detail(job_key):
+    """Full-page view of a single job."""
+    applied_keys = set()
+    bookmarked_keys = set()
+    dismissed_keys = set()
+    if current_user.is_authenticated:
+        applied_keys = get_applied_job_keys(current_user.id)
+        bookmarked_keys = get_bookmarked_job_keys(current_user.id)
+        dismissed_keys = get_dismissed_job_keys(current_user.id)
+
+    # Try to find job in bookmarks or shared jobs
+    job = None
+    if current_user.is_authenticated:
+        bookmarks = get_bookmarked_jobs(current_user.id)
+        for b in bookmarks:
+            if dict(b)["job_key"] == job_key:
+                job = dict(b)
+                break
+    if not job:
+        shared = get_shared_job(job_key)
+        if shared:
+            job = shared
+    if not job:
+        flash("Job not found. Try searching again.", "warning")
+        return redirect(url_for("index"))
+
+    return render_template(
+        "job_detail.html", job=job,
+        applied_keys=applied_keys, bookmarked_keys=bookmarked_keys, dismissed_keys=dismissed_keys,
+    )
+
+
+# --- Analytics ---
+
+@app.route("/analytics")
+@login_required
+def analytics():
+    from services.analytics import get_search_analytics
+    data = get_search_analytics(current_user.id)
+    return render_template("analytics.html", analytics=data)
+
+
+# --- Interview Prep ---
+
+@app.route("/jobs/interview-prep", methods=["POST"])
+@csrf.exempt
+@login_required
+def interview_prep():
+    from services.interview_prep import generate_interview_prep
+    data = request.get_json() or {}
+
+    default = get_default_resume(current_user.id)
+    if not default:
+        return jsonify({"error": "No resume saved. Upload a resume first."}), 400
+
+    result = generate_interview_prep(
+        default["raw_text"],
+        data.get("title", ""),
+        data.get("company", ""),
+        data.get("description", ""),
+        user_name=current_user.name,
+    )
+    return jsonify(result)
+
+
+# --- Calendar / Interview Scheduling ---
+
+@app.route("/calendar")
+@login_required
+def calendar():
+    interviews = get_applied_jobs(current_user.id, stage="interview")
+    all_applied = get_applied_jobs(current_user.id)
+    return render_template("calendar.html", interviews=interviews, all_applied_jobs=all_applied)
+
+
+@app.route("/calendar/schedule", methods=["POST"])
+@login_required
+def schedule_interview():
+    job_key = request.form.get("job_key")
+    date = request.form.get("interview_date", "")
+    time = request.form.get("interview_time", "")
+    notes = request.form.get("interview_notes", "")
+
+    if not job_key or not date:
+        flash("Job and date are required.", "error")
+        return redirect(url_for("calendar"))
+
+    # Move to interview stage and save date/time in notes
+    schedule_note = f"{date} {time}".strip()
+    if notes:
+        schedule_note += f" - {notes}"
+    update_applied_stage(job_key, current_user.id, "interview")
+    update_applied_notes(job_key, current_user.id, schedule_note)
+    flash("Interview scheduled.", "success")
+    return redirect(url_for("calendar"))
+
+
+@app.route("/calendar/ics/<job_key>")
+@login_required
+def download_ics(job_key):
+    """Generate an ICS file for an interview."""
+    from datetime import datetime, timedelta
+    jobs = get_applied_jobs(current_user.id, stage="interview")
+    job = None
+    for j in jobs:
+        if j["job_key"] == job_key:
+            job = dict(j)
+            break
+    if not job:
+        flash("Interview not found.", "error")
+        return redirect(url_for("calendar"))
+
+    # Parse date from notes (format: YYYY-MM-DD HH:MM)
+    notes = job.get("notes", "") or ""
+    interview_dt = None
+    import re
+    date_match = re.search(r"(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})", notes)
+    if date_match:
+        try:
+            interview_dt = datetime.strptime(
+                f"{date_match.group(1)} {date_match.group(2)}", "%Y-%m-%d %H:%M"
+            )
+        except ValueError:
+            pass
+
+    if not interview_dt:
+        interview_dt = datetime.now() + timedelta(days=1)
+
+    end_dt = interview_dt + timedelta(hours=1)
+    now = datetime.utcnow()
+
+    ics = f"""BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Job Search Tool//EN
+BEGIN:VEVENT
+DTSTART:{interview_dt.strftime('%Y%m%dT%H%M%S')}
+DTEND:{end_dt.strftime('%Y%m%dT%H%M%S')}
+DTSTAMP:{now.strftime('%Y%m%dT%H%M%SZ')}
+SUMMARY:Interview - {job['title']} at {job['company']}
+DESCRIPTION:Interview for {job['title']} at {job['company']}
+END:VEVENT
+END:VCALENDAR"""
+
+    return Response(
+        ics,
+        mimetype="text/calendar",
+        headers={"Content-Disposition": f"attachment; filename=interview_{job_key}.ics"},
+    )
+
 
 
 # --- Startup ---

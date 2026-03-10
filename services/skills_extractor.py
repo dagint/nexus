@@ -57,9 +57,9 @@ def extract_keywords(text):
 
 def extract_keywords_smart(text):
     """Try Claude API first, fall back to heuristic."""
-    from config import Config
+    from services.ai_client import is_available
 
-    if Config.ANTHROPIC_API_KEY:
+    if is_available():
         try:
             return _claude_extract(text)
         except Exception as e:
@@ -70,10 +70,7 @@ def extract_keywords_smart(text):
 
 def _claude_extract(text):
     """Use Claude API to extract a rich skill graph from resume text."""
-    import anthropic
-    from config import Config
-
-    client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
+    from services.ai_client import call
 
     prompt = f"""Analyze this resume and extract structured information. Return ONLY valid JSON with this schema:
 
@@ -94,13 +91,9 @@ Seniority tiers: IC1=junior/new grad, IC2=mid, IC3=senior, IC4=staff, IC5=princi
 Resume:
 {text[:8000]}"""
 
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=2000,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    response_text = message.content[0].text
+    response_text = call(prompt, model="claude-haiku-4-5-20251001", max_tokens=1500)
+    if not response_text:
+        raise RuntimeError("Claude API unavailable")
     # Extract JSON from response
     json_match = re.search(r"\{[\s\S]*\}", response_text)
     if json_match:

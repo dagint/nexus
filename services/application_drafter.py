@@ -118,10 +118,9 @@ def generate_application_draft(resume_text, resume_data, job_title, company, job
         resume_data = {}
 
     # Try Claude API first
-    if Config.ANTHROPIC_API_KEY and resume_text:
+    from services.ai_client import is_available, call as ai_call
+    if is_available() and resume_text:
         try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
 
             prompt = f"""Based on the candidate's resume and the job description, generate an application draft.
 
@@ -164,13 +163,9 @@ EXPERIENCE_HIGHLIGHT:
 
 Return ONLY the formatted sections above, nothing else."""
 
-            message = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=1500,
-                messages=[{"role": "user", "content": prompt}],
-            )
-
-            text = message.content[0].text.strip()
+            text = ai_call(prompt, model="claude-sonnet-4-20250514", max_tokens=1500)
+            if not text:
+                raise RuntimeError("API unavailable")
 
             # Parse sections
             def extract_section(section_name, text):

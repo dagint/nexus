@@ -266,8 +266,7 @@ def _generate_heuristic_prep(resume_text, job_title, company, job_description, u
 def _generate_ai_prep(resume_text, job_title, company, job_description, user_name=""):
     """Generate interview prep using the Claude API."""
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
+        from services.ai_client import call as ai_call
 
         prompt = f"""You are an expert interview coach. Generate interview preparation materials for the following candidate and job.
 
@@ -291,14 +290,11 @@ Make the technical questions specific to the technologies and skills mentioned i
 Make the talking points reference the candidate's actual experience from their resume.
 Return ONLY valid JSON, no markdown or other text."""
 
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=2000,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        response_text = ai_call(prompt, model="claude-sonnet-4-20250514", max_tokens=2000)
+        if not response_text:
+            return None
 
         import json
-        response_text = message.content[0].text.strip()
         # Handle potential markdown code blocks
         if response_text.startswith("```"):
             response_text = re.sub(r"^```(?:json)?\n?", "", response_text)
@@ -328,7 +324,8 @@ def generate_interview_prep(resume_text, job_title, company, job_description, us
         - company_research_tips: list of str
     """
     # Try AI generation first if API key is available
-    if Config.ANTHROPIC_API_KEY:
+    from services.ai_client import is_available
+    if is_available():
         result = _generate_ai_prep(resume_text, job_title, company, job_description, user_name)
         if result:
             return result

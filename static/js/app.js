@@ -581,6 +581,111 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+    // --- Interview Prep ---
+    document.querySelectorAll(".interview-prep-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            var title = this.dataset.title || "";
+            var company = this.dataset.company || "";
+            var description = this.dataset.description || "";
+            var originalText = this.textContent;
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Preparing...';
+
+            fetch("/jobs/interview-prep", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: title, company: company, description: description }),
+            })
+                .then(function (resp) {
+                    return resp.json().then(function (data) {
+                        return { ok: resp.ok, data: data };
+                    });
+                })
+                .then(function (result) {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+
+                    if (!result.ok) {
+                        alert(result.data.error || "Failed to generate interview prep.");
+                        return;
+                    }
+
+                    var data = result.data;
+
+                    // Technical questions accordion
+                    var techHtml = "";
+                    (data.technical_questions || []).forEach(function (q, i) {
+                        techHtml += '<div class="accordion-item">' +
+                            '<h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#techQ' + i + '">' + q.question + '</button></h2>' +
+                            '<div id="techQ' + i + '" class="accordion-collapse collapse"><div class="accordion-body">' + q.talking_points + '</div></div></div>';
+                    });
+                    document.getElementById("techQuestions").innerHTML = techHtml;
+
+                    // Behavioral questions accordion
+                    var behHtml = "";
+                    (data.behavioral_questions || []).forEach(function (q, i) {
+                        behHtml += '<div class="accordion-item">' +
+                            '<h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#behQ' + i + '">' + q.question + '</button></h2>' +
+                            '<div id="behQ' + i + '" class="accordion-collapse collapse"><div class="accordion-body">' + q.talking_points + '</div></div></div>';
+                    });
+                    document.getElementById("behavioralQuestions").innerHTML = behHtml;
+
+                    // Questions to ask
+                    var askHtml = "";
+                    (data.questions_to_ask || []).forEach(function (q) {
+                        askHtml += "<li>" + q + "</li>";
+                    });
+                    document.getElementById("questionsToAsk").innerHTML = askHtml;
+
+                    // Company tips
+                    var tipsHtml = "";
+                    (data.company_research_tips || []).forEach(function (t) {
+                        tipsHtml += "<li>" + t + "</li>";
+                    });
+                    document.getElementById("companyTips").innerHTML = tipsHtml;
+
+                    var modal = new bootstrap.Modal(document.getElementById("interviewPrepModal"));
+                    modal.show();
+                })
+                .catch(function (err) {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                    alert("Error: " + err.message);
+                });
+        });
+    });
+
+    // Copy interview prep
+    var copyPrep = document.getElementById("copyInterviewPrep");
+    if (copyPrep) {
+        copyPrep.addEventListener("click", function () {
+            var text = "INTERVIEW PREPARATION\n\n";
+            text += "TECHNICAL QUESTIONS\n";
+            document.querySelectorAll("#techQuestions .accordion-item").forEach(function (item) {
+                text += "\nQ: " + item.querySelector(".accordion-button").textContent.trim() + "\n";
+                text += "Talking Points: " + item.querySelector(".accordion-body").textContent.trim() + "\n";
+            });
+            text += "\nBEHAVIORAL QUESTIONS\n";
+            document.querySelectorAll("#behavioralQuestions .accordion-item").forEach(function (item) {
+                text += "\nQ: " + item.querySelector(".accordion-button").textContent.trim() + "\n";
+                text += "Talking Points: " + item.querySelector(".accordion-body").textContent.trim() + "\n";
+            });
+            text += "\nQUESTIONS TO ASK\n";
+            document.querySelectorAll("#questionsToAsk li").forEach(function (li) {
+                text += "- " + li.textContent + "\n";
+            });
+            text += "\nCOMPANY RESEARCH TIPS\n";
+            document.querySelectorAll("#companyTips li").forEach(function (li) {
+                text += "- " + li.textContent + "\n";
+            });
+            navigator.clipboard.writeText(text.trim()).then(function () {
+                copyPrep.textContent = "Copied!";
+                setTimeout(function () { copyPrep.textContent = "Copy All"; }, 2000);
+            });
+        });
+    }
+
     // --- Search form loading state ---
     var searchForm = document.getElementById("searchForm");
     if (searchForm) {

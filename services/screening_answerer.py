@@ -156,10 +156,9 @@ def generate_screening_answers(resume_text, job_title, company, job_description,
         return []
 
     # Try Claude API first
-    if Config.ANTHROPIC_API_KEY and resume_text:
+    from services.ai_client import is_available, call as ai_call
+    if is_available() and resume_text:
         try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
 
             questions_text = "\n".join(f"{i+1}. {q}" for i, q in enumerate(questions))
 
@@ -187,13 +186,9 @@ Return answers in this exact format (one per question, numbered to match):
 2. [answer to question 2]
 ...and so on. Return ONLY the numbered answers, no other text."""
 
-            message = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=2000,
-                messages=[{"role": "user", "content": prompt}],
-            )
-
-            response_text = message.content[0].text.strip()
+            response_text = ai_call(prompt, model="claude-sonnet-4-20250514", max_tokens=2000)
+            if not response_text:
+                raise RuntimeError("API unavailable")
             # Parse numbered answers
             answers = []
             lines = response_text.split("\n")
