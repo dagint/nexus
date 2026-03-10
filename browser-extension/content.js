@@ -19,16 +19,8 @@
     return "";
   }
 
-  function getHTML(selectors) {
-    for (const sel of selectors) {
-      const el = document.querySelector(sel);
-      if (el) {
-        const text = el.innerText.trim();
-        if (text) return text;
-      }
-    }
-    return "";
-  }
+  // getHTML is an alias for getText — kept for semantic clarity in extractors
+  const getHTML = getText;
 
   function getMeta(name) {
     const el =
@@ -204,6 +196,13 @@
     const btn = document.createElement("button");
     btn.id = "jst-floating-save-btn";
     btn.textContent = "Save to Nexus";
+
+    function resetBtn() {
+      btn.textContent = "Save to Nexus";
+      btn.style.background = "#75b798";
+      btn.disabled = false;
+    }
+
     btn.addEventListener("click", async () => {
       btn.textContent = "Saving...";
       btn.disabled = true;
@@ -214,10 +213,7 @@
 
         if (!serverUrl) {
           btn.textContent = "Set server URL in extension popup";
-          setTimeout(() => {
-            btn.textContent = "Save to Nexus";
-            btn.disabled = false;
-          }, 3000);
+          setTimeout(resetBtn, 3000);
           return;
         }
 
@@ -234,19 +230,11 @@
 
         btn.textContent = "Saved!";
         btn.style.background = "#63a382";
-        setTimeout(() => {
-          btn.textContent = "Save to Nexus";
-          btn.style.background = "#75b798";
-          btn.disabled = false;
-        }, 3000);
+        setTimeout(resetBtn, 3000);
       } catch (err) {
         btn.textContent = "Error - try again";
         btn.style.background = "#dc3545";
-        setTimeout(() => {
-          btn.textContent = "Save to Nexus";
-          btn.style.background = "#75b798";
-          btn.disabled = false;
-        }, 3000);
+        setTimeout(resetBtn, 3000);
       }
     });
 

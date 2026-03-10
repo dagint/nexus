@@ -11,19 +11,36 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 
-def send_digest(email, jobs, search_query, app=None, still_open_jobs=None):
-    """Send an HTML email digest of new job listings."""
-    if not Config.SMTP_USER or not Config.SMTP_PASSWORD:
-        logger.warning("SMTP not configured, skipping email to %s", email)
-        return False
+def _smtp_configured():
+    """Check if SMTP credentials are available."""
+    return bool(Config.SMTP_USER and Config.SMTP_PASSWORD)
 
-    # Group jobs by tier
+
+def _send_email(msg):
+    """Send an email message via SMTP."""
+    with smtplib.SMTP(Config.SMTP_HOST, Config.SMTP_PORT) as server:
+        server.starttls()
+        server.login(Config.SMTP_USER, Config.SMTP_PASSWORD)
+        server.send_message(msg)
+
+
+def _group_by_tier(jobs):
+    """Group jobs into match-quality tiers."""
     tiers = {"strong": [], "possible": [], "stretch": []}
     for job in jobs:
         tier = job.get("match_tier", "possible")
         if tier in tiers:
             tiers[tier].append(job)
+    return tiers
 
+
+def send_digest(email, jobs, search_query, app=None, still_open_jobs=None):
+    """Send an HTML email digest of new job listings."""
+    if not _smtp_configured():
+        logger.warning("SMTP not configured, skipping email to %s", email)
+        return False
+
+    tiers = _group_by_tier(jobs)
     still_open_jobs = still_open_jobs or []
 
     try:
@@ -39,7 +56,6 @@ def send_digest(email, jobs, search_query, app=None, still_open_jobs=None):
                     still_open_count=len(still_open_jobs),
                 )
         else:
-            # Fallback plain HTML
             html = _simple_html(jobs, search_query)
 
         msg = MIMEMultipart("alternative")
@@ -47,11 +63,7 @@ def send_digest(email, jobs, search_query, app=None, still_open_jobs=None):
         msg["From"] = Config.SMTP_FROM
         msg["To"] = email
         msg.attach(MIMEText(html, "html"))
-
-        with smtplib.SMTP(Config.SMTP_HOST, Config.SMTP_PORT) as server:
-            server.starttls()
-            server.login(Config.SMTP_USER, Config.SMTP_PASSWORD)
-            server.send_message(msg)
+        _send_email(msg)
 
         logger.info("Sent digest email to %s with %d jobs", email, len(jobs))
         return True
@@ -66,16 +78,11 @@ def send_consolidated_digest(email, jobs, search_queries, app=None, still_open_j
 
     search_queries: list of query strings that triggered this digest.
     """
-    if not Config.SMTP_USER or not Config.SMTP_PASSWORD:
+    if not _smtp_configured():
         logger.warning("SMTP not configured, skipping email to %s", email)
         return False
 
-    tiers = {"strong": [], "possible": [], "stretch": []}
-    for job in jobs:
-        tier = job.get("match_tier", "possible")
-        if tier in tiers:
-            tiers[tier].append(job)
-
+    tiers = _group_by_tier(jobs)
     still_open_jobs = still_open_jobs or []
     combined_query = " | ".join(search_queries)
 
@@ -108,11 +115,7 @@ def send_consolidated_digest(email, jobs, search_queries, app=None, still_open_j
         msg["From"] = Config.SMTP_FROM
         msg["To"] = email
         msg.attach(MIMEText(html, "html"))
-
-        with smtplib.SMTP(Config.SMTP_HOST, Config.SMTP_PORT) as server:
-            server.starttls()
-            server.login(Config.SMTP_USER, Config.SMTP_PASSWORD)
-            server.send_message(msg)
+        _send_email(msg)
 
         logger.info("Sent consolidated digest to %s with %d jobs from %d alerts",
                      email, len(jobs), alert_count)
@@ -125,7 +128,7 @@ def send_consolidated_digest(email, jobs, search_queries, app=None, still_open_j
 
 def send_password_reset_email(email, token, base_url):
     """Send a password reset email with the reset link."""
-    if not Config.SMTP_USER or not Config.SMTP_PASSWORD:
+    if not _smtp_configured():
         logger.warning("SMTP not configured, skipping password reset email to %s", email)
         return False
 
@@ -148,11 +151,7 @@ def send_password_reset_email(email, token, base_url):
         msg["From"] = Config.SMTP_FROM
         msg["To"] = email
         msg.attach(MIMEText(html, "html"))
-
-        with smtplib.SMTP(Config.SMTP_HOST, Config.SMTP_PORT) as server:
-            server.starttls()
-            server.login(Config.SMTP_USER, Config.SMTP_PASSWORD)
-            server.send_message(msg)
+        _send_email(msg)
 
         logger.info("Sent password reset email to %s", email)
         return True
@@ -164,7 +163,7 @@ def send_password_reset_email(email, token, base_url):
 
 def _simple_html(jobs, search_query):
     """Fallback HTML template for emails."""
-    rows = ""
+    parts = []
     for job in jobs[:20]:
         score = job.get("match_score", "?")
         tier = job.get("match_tier", "")
@@ -176,7 +175,7 @@ def _simple_html(jobs, search_query):
         elif tier == "stretch":
             badge = '<span style="color:gray">[Stretch]</span>'
 
-        rows += f"""
+        parts.append(f"""
         <tr>
             <td style="padding:8px;border-bottom:1px solid #eee">
                 <strong>{escape(job['title'])}</strong> {badge}<br>
@@ -184,8 +183,9 @@ def _simple_html(jobs, search_query):
                 <small>Score: {score}/100 | {escape(job.get('remote_status', ''))} | {escape(job.get('source', ''))}</small><br>
                 <a href="{escape(job.get('apply_url', '#'))}">Apply &rarr;</a>
             </td>
-        </tr>"""
+        </tr>""")
 
+    rows = "".join(parts)
     return f"""
     <html><body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
     <h2>Job Alert: {len(jobs)} new matches</h2>

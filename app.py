@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+from datetime import datetime, timedelta
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, Response
 from flask_wtf.csrf import CSRFProtect
@@ -1172,7 +1173,6 @@ def schedule_interview():
 @login_required
 def download_ics(job_key):
     """Generate an ICS file for an interview."""
-    from datetime import datetime, timedelta
     jobs = get_applied_jobs(current_user.id, stage="interview")
     job = None
     for j in jobs:
@@ -1186,7 +1186,6 @@ def download_ics(job_key):
     # Parse date from notes (format: YYYY-MM-DD HH:MM)
     notes = job.get("notes", "") or ""
     interview_dt = None
-    import re
     date_match = re.search(r"(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})", notes)
     if date_match:
         try:

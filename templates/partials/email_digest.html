@@ -73,7 +73,7 @@
             {% if job.company_info.glassdoor_rating %} | Rating: {{ job.company_info.glassdoor_rating }}{% endif %}
         </div>
         {% endif %}
-        <p style="font-size:13px;color:#888;margin:8px 0 4px">{{ job.description[:200] | striptags }}...</p>
+        <p style="font-size:13px;color:#888;margin:8px 0 4px">{{ job.description | striptags | truncate(200, True) }}</p>
         {% if job.match_summary %}
         <p style="font-size:12px;color:#28a745;margin:4px 0"><em>{{ job.match_summary }}</em></p>
         {% endif %}
