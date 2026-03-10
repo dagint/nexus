@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Resume v{{ version.version_number }} - {{ resume.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>{{ resume.name }} - Version {{ version.version_number }}</h2>
+    <a href="{{ url_for('resume_versions', rid=resume.id) }}" class="btn btn-outline-secondary">Back to History</a>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">
+        <div class="d-flex justify-content-between">
+            <span>{{ version.change_note or 'No note' }}</span>
+            <small class="text-muted">{{ version.created_at[:16] }}</small>
+        </div>
+    </div>
+    <div class="card-body">
+        <pre class="mb-0" style="white-space: pre-wrap;">{{ version.raw_text }}</pre>
+    </div>
+</div>
+
+{% if version.skills_json %}
+<div class="card mb-3">
+    <div class="card-header">Skills Data</div>
+    <div class="card-body">
+        <small class="text-muted">Skills were extracted for this version.</small>
+    </div>
+</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('restore_resume_version', rid=resume.id, vid=version.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-warning" onclick="return confirm('Restore this version as current?')">
+        Restore This Version
+    </button>
+</form>
+{% endblock %}

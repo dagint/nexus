@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Search Results - {{ query }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Sidebar -->
+    <div class="col-lg-3 mb-4">
+        <div class="card sticky-top" style="top: 1rem">
+            <div class="card-header">
+                <h6 class="mb-0">Detected Skills</h6>
+            </div>
+            <div class="card-body">
+                {% if skills %}
+                <div class="d-flex flex-wrap gap-1 mb-3">
+                    {% for skill in skills[:20] %}
+                    <span class="badge bg-primary">{{ skill if skill is string else skill.skill }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if job_titles %}
+                <h6 class="small text-muted">Matched Titles</h6>
+                <div class="d-flex flex-wrap gap-1 mb-3">
+                    {% for title in job_titles %}
+                    <span class="badge bg-info text-dark">{{ title }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if seniority %}
+                <small class="text-muted">Seniority: <strong>{{ seniority }}</strong></small>
+                {% endif %}
+
+                {% if experience_years %}
+                <br><small class="text-muted">Experience: <strong>{{ experience_years }} years</strong></small>
+                {% endif %}
+            </div>
+
+            <div class="card-header border-top">
+                <h6 class="mb-0">Filters</h6>
+            </div>
+            <div class="card-body">
+                <div class="form-check mb-2">
+                    <input type="checkbox" class="form-check-input filter-check" id="filterRemote" data-filter="remote">
+                    <label class="form-check-label" for="filterRemote">Remote only</label>
+                </div>
+                <div class="form-check mb-2">
+                    <input type="checkbox" class="form-check-input filter-check" id="filterHideTravel" data-filter="hide-travel">
+                    <label class="form-check-label" for="filterHideTravel">Hide travel jobs</label>
+                </div>
+                <div class="form-check mb-2">
+                    <input type="checkbox" class="form-check-input filter-check" id="filterHideStaffing" data-filter="hide-staffing">
+                    <label class="form-check-label" for="filterHideStaffing">Hide staffing agencies</label>
+                </div>
+                <div class="form-check mb-2">
+                    <input type="checkbox" class="form-check-input filter-check" id="filterHideStale" data-filter="hide-stale">
+                    <label class="form-check-label" for="filterHideStale">Hide stale (30+ days)</label>
+                </div>
+                <div class="form-check mb-2">
+                    <input type="checkbox" class="form-check-input filter-check" id="filterHideApplied" data-filter="hide-applied" checked>
+                    <label class="form-check-label" for="filterHideApplied">Hide applied</label>
+                </div>
+                <div class="form-check mb-2">
+                    <input type="checkbox" class="form-check-input filter-check" id="filterHideDismissed" data-filter="hide-dismissed" checked>
+                    <label class="form-check-label" for="filterHideDismissed">Hide dismissed</label>
+                </div>
+
+                <hr>
+                <h6 class="small text-muted">Sources</h6>
+                {% for source in sources %}
+                <div class="form-check mb-1">
+                    <input type="checkbox" class="form-check-input source-check" id="source{{ source }}"
+                           data-source="{{ source }}" checked>
+                    <label class="form-check-label small" for="source{{ source }}">{{ source }}</label>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Results -->
+    <div class="col-lg-9">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4>
+                {{ total_jobs }} results for "{{ query }}"
+                {% if location %} in {{ location }}{% endif %}
+            </h4>
+            <div class="d-flex gap-2 align-items-center">
+                {% for src in unavailable_sources %}
+                <span class="badge bg-warning text-dark" title="API key not configured">{{ src }} unavailable</span>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Sort + Export bar -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="d-flex gap-2 align-items-center">
+                <small class="text-muted">Sort by:</small>
+                <a href="{{ url_for('search', query=query, location=location, sort='score', page=1) }}"
+                   class="btn btn-sm {{ 'btn-primary' if sort == 'score' else 'btn-outline-secondary' }}">Match Score</a>
+                <a href="{{ url_for('search', query=query, location=location, sort='date', page=1) }}"
+                   class="btn btn-sm {{ 'btn-primary' if sort == 'date' else 'btn-outline-secondary' }}">Date</a>
+                <a href="{{ url_for('search', query=query, location=location, sort='salary', page=1) }}"
+                   class="btn btn-sm {{ 'btn-primary' if sort == 'salary' else 'btn-outline-secondary' }}">Salary</a>
+            </div>
+            {% if current_user.is_authenticated %}
+            <a href="{{ url_for('export_csv', query=query, location=location) }}"
+               class="btn btn-sm btn-outline-secondary">Export CSV</a>
+            {% endif %}
+        </div>
+
+        {% if not jobs %}
+        <div class="alert alert-info">
+            <h5>No jobs found</h5>
+            <p>Try broadening your search:</p>
+            <ul>
+                <li>Use more general keywords</li>
+                <li>Remove location restriction</li>
+                <li>Expand date range</li>
+                <li>Uncheck "Remote only"</li>
+            </ul>
+        </div>
+        {% else %}
+
+        <!-- Tiered sections -->
+        {% for tier_name, tier_label, tier_class in [('strong', 'Strong Match', 'success'), ('possible', 'Possible Match', 'warning'), ('stretch', 'Stretch', 'secondary')] %}
+        {% set tier_jobs = jobs | selectattr('match_tier', 'equalto', tier_name) | list %}
+        {% if tier_jobs %}
+        <div class="tier-section mb-4" data-tier="{{ tier_name }}">
+            <h5>
+                <span class="badge bg-{{ tier_class }}">{{ tier_label }}</span>
+                <small class="text-muted">({{ tier_jobs | length }})</small>
+            </h5>
+            <div class="collapse show" id="tier-{{ tier_name }}">
+                {% for job in tier_jobs %}
+                {% include "partials/job_card.html" %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+
+        <!-- Unscored jobs (when AI matching not used) -->
+        {% set unscored = jobs | rejectattr('match_tier', 'defined') | list %}
+        {% if unscored %}
+        {% for job in unscored %}
+        {% include "partials/job_card.html" %}
+        {% endfor %}
+        {% endif %}
+
+        <!-- Compare bar -->
+        <div id="compareBar" class="position-fixed bottom-0 start-50 translate-middle-x mb-3 d-none" style="z-index: 1050;">
+            <div class="card shadow">
+                <div class="card-body py-2 px-4 d-flex align-items-center gap-3">
+                    <span><span id="compareCount">0</span> jobs selected</span>
+                    <button id="compareBtn" class="btn btn-sm btn-primary" disabled>Compare</button>
+                    <button id="compareClear" class="btn btn-sm btn-outline-secondary">Clear</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <nav class="mt-4">
+            <ul class="pagination justify-content-center">
+                <li class="page-item {{ 'disabled' if page <= 1 }}">
+                    <a class="page-link" href="{{ url_for('search', query=query, location=location, sort=sort, page=page-1) }}">Previous</a>
+                </li>
+                {% for p in range(1, total_pages + 1) %}
+                {% if p == page or (p >= page - 2 and p <= page + 2) or p == 1 or p == total_pages %}
+                <li class="page-item {{ 'active' if p == page }}">
+                    <a class="page-link" href="{{ url_for('search', query=query, location=location, sort=sort, page=p) }}">{{ p }}</a>
+                </li>
+                {% elif p == page - 3 or p == page + 3 %}
+                <li class="page-item disabled"><span class="page-link">...</span></li>
+                {% endif %}
+                {% endfor %}
+                <li class="page-item {{ 'disabled' if page >= total_pages }}">
+                    <a class="page-link" href="{{ url_for('search', query=query, location=location, sort=sort, page=page+1) }}">Next</a>
+                </li>
+            </ul>
+            <p class="text-center text-muted small">Page {{ page }} of {{ total_pages }} ({{ total_jobs }} results)</p>
+        </nav>
+        {% endif %}
+
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

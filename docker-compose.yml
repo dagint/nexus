@@ -1,0 +1,13 @@
+services:
+  job-search:
+    build: .
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    volumes:
+      - job_data:/app/data/db
+    restart: unless-stopped
+
+volumes:
+  job_data:

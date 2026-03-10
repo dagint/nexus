@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Search History{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Search History</h2>
+
+{% if searches %}
+<div class="table-responsive">
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th>Query</th>
+                <th>Location</th>
+                <th>Remote</th>
+                <th>Resume</th>
+                <th>Results</th>
+                <th>Date</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in searches %}
+            <tr>
+                <td><strong>{{ s.query }}</strong></td>
+                <td>{{ s.location or 'Any' }}</td>
+                <td>{{ 'Yes' if s.remote_only else 'No' }}</td>
+                <td>{{ s.resume_name or '-' }}</td>
+                <td>{{ s.result_count }}</td>
+                <td><small>{{ s.searched_at[:16] }}</small></td>
+                <td>
+                    <a href="{{ url_for('search', query=s.query, location=s.location or '', remote_only='true' if s.remote_only else '') }}"
+                       class="btn btn-sm btn-outline-primary">Re-run</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p class="text-muted">No search history yet. Run a search to start tracking.</p>
+{% endif %}
+{% endblock %}

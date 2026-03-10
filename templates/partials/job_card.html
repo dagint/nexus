@@ -1,0 +1,217 @@
+<div class="card mb-3 job-card"
+     data-remote="{{ job.remote_status }}"
+     data-travel="{{ 'yes' if job.travel_info else 'no' }}"
+     data-source="{{ job.source }}"
+     data-stale="{{ 'yes' if job.is_stale else 'no' }}"
+     data-staffing="{{ 'yes' if job.is_staffing_agency else 'no' }}"
+     data-applied="{{ 'yes' if job.job_key in applied_keys else 'no' }}"
+     data-dismissed="{{ 'yes' if dismissed_keys is defined and job.job_key in dismissed_keys else 'no' }}"
+     data-score="{{ job.match_score|default(0) }}">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start">
+            <div class="flex-grow-1">
+                <div class="form-check form-check-inline float-start me-2">
+                    <input type="checkbox" class="form-check-input compare-check" data-job-key="{{ job.job_key }}">
+                </div>
+                <h5 class="card-title mb-1">
+                    {{ job.title }}
+                    {% if job.match_score is defined %}
+                    <span class="badge bg-{{ 'success' if job.match_tier == 'strong' else 'warning' if job.match_tier == 'possible' else 'secondary' }} ms-2">
+                        {{ job.match_score }}/100
+                    </span>
+                    {% endif %}
+                </h5>
+                <h6 class="card-subtitle text-muted mb-2">
+                    {{ job.company }}
+                    {% if job.location %} &mdash; {{ job.location }}{% endif %}
+                </h6>
+            </div>
+            <div class="d-flex gap-1 flex-shrink-0">
+                {% if job.remote_status == 'remote' %}
+                <span class="badge bg-success">Remote</span>
+                {% elif job.remote_status == 'hybrid' %}
+                <span class="badge bg-info">Hybrid</span>
+                {% endif %}
+
+                {% if job.remote_detail %}
+                <span class="badge bg-outline-success border border-success text-success small">{{ job.remote_detail | replace('_', ' ') | title }}</span>
+                {% endif %}
+
+                {% if job.travel_info %}
+                <span class="badge bg-warning text-dark">{{ job.travel_info }}</span>
+                {% endif %}
+
+                {% if job.easy_apply %}
+                <span class="badge bg-primary">Quick Apply</span>
+                {% endif %}
+
+                {% if job.is_stale %}
+                <span class="badge bg-secondary">Stale</span>
+                {% endif %}
+
+                {% if job.is_staffing_agency %}
+                <span class="badge bg-dark">Staffing Agency</span>
+                {% endif %}
+
+                {% if job.timezone_req %}
+                <span class="badge bg-outline-dark border text-dark small">{{ job.timezone_req }}</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Match reasons / summary -->
+        {% if job.match_summary %}
+        <p class="text-success small mb-2"><em>{{ job.match_summary }}</em></p>
+        {% elif job.match_reasons %}
+        <div class="d-flex flex-wrap gap-1 mb-2">
+            {% for reason in job.match_reasons[:3] %}
+            <span class="badge bg-light text-dark border small">{{ reason }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Salary -->
+        {% if job.salary_min or job.salary_max %}
+        <p class="mb-1">
+            <strong>Salary:</strong>
+            {% if job.salary_min and job.salary_max %}
+                ${{ "{:,.0f}".format(job.salary_min) }} - ${{ "{:,.0f}".format(job.salary_max) }}
+            {% elif job.salary_min %}
+                From ${{ "{:,.0f}".format(job.salary_min) }}
+            {% elif job.salary_max %}
+                Up to ${{ "{:,.0f}".format(job.salary_max) }}
+            {% endif %}
+            {% if job.salary_period and job.salary_period != 'annual' %}
+                <small class="text-muted">({{ job.salary_period }}{% if job.salary_annual_min %} | ~${{ "{:,.0f}".format(job.salary_annual_min) }}{% if job.salary_annual_max and job.salary_annual_max != job.salary_annual_min %}-${{ "{:,.0f}".format(job.salary_annual_max) }}{% endif %}/yr{% endif %})</small>
+            {% endif %}
+        </p>
+        {% endif %}
+
+        <!-- Description excerpt -->
+        <p class="card-text small text-muted mb-2">
+            {{ job.description[:300] | striptags }}{% if job.description | length > 300 %}...{% endif %}
+        </p>
+
+        <!-- Commute info -->
+        {% if job.commute_info %}
+        <p class="small mb-1">
+            {% if job.commute_info.is_feasible %}
+            <span class="text-success">{{ job.commute_info.label }}</span>
+            {% else %}
+            <span class="text-warning">{{ job.commute_info.label }} (exceeds commute preference)</span>
+            {% endif %}
+        </p>
+        {% endif %}
+
+        <!-- Role velocity warning -->
+        {% if job.role_velocity %}
+        <p class="small text-warning mb-1">
+            <em>This company has posted this role {{ job.role_velocity }} times in 6 months</em>
+        </p>
+        {% endif %}
+
+        <!-- Company info -->
+        {% if job.company_info %}
+        <details class="mb-2">
+            <summary class="small text-primary">Company Info</summary>
+            <div class="small mt-1 ps-2">
+                {% if job.company_info.size %}<div>Size: {{ job.company_info.size }}</div>{% endif %}
+                {% if job.company_info.glassdoor_rating %}<div>Rating: {{ job.company_info.glassdoor_rating }}</div>{% endif %}
+                {% if job.company_info.description %}<div>{{ job.company_info.description[:150] }}</div>{% endif %}
+            </div>
+        </details>
+        {% endif %}
+
+        <!-- Footer -->
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="small text-muted">
+                <span class="badge bg-light text-dark border">{{ job.source }}</span>
+                {% if job.posted_date %}
+                &mdash; Posted: {{ job.posted_date[:10] }}
+                {% endif %}
+                {% if job.age_days is not none %}
+                ({{ job.age_days }}d ago)
+                {% endif %}
+            </div>
+            <div class="d-flex gap-2">
+                {% if current_user.is_authenticated %}
+                {% if dismissed_keys is defined and job.job_key in dismissed_keys %}
+                <button class="btn btn-sm btn-secondary dismiss-btn" data-job-key="{{ job.job_key }}" data-dismissed="true"
+                        data-title="{{ job.title }}" data-company="{{ job.company }}">
+                    Dismissed
+                </button>
+                {% else %}
+                <button class="btn btn-sm btn-outline-secondary dismiss-btn" data-job-key="{{ job.job_key }}" data-dismissed="false"
+                        data-title="{{ job.title }}" data-company="{{ job.company }}"
+                        title="Not interested">
+                    <span aria-hidden="true">&darr;</span> Not Interested
+                </button>
+                {% endif %}
+                {% endif %}
+
+                {% if current_user.is_authenticated %}
+                {% if job.job_key in bookmarked_keys %}
+                <button class="btn btn-sm btn-warning bookmark-btn" data-job-key="{{ job.job_key }}" data-bookmarked="true"
+                        data-title="{{ job.title }}" data-company="{{ job.company }}">
+                    Bookmarked
+                </button>
+                {% else %}
+                <button class="btn btn-sm btn-outline-warning bookmark-btn" data-job-key="{{ job.job_key }}" data-bookmarked="false"
+                        data-title="{{ job.title }}" data-company="{{ job.company }}">
+                    Bookmark
+                </button>
+                {% endif %}
+                {% endif %}
+
+                {% if current_user.is_authenticated %}
+                <button class="btn btn-sm btn-outline-info cover-letter-btn"
+                        data-title="{{ job.title }}" data-company="{{ job.company }}"
+                        data-description="{{ job.description[:2000] | e }}">
+                    Cover Letter
+                </button>
+                {% endif %}
+
+                {% if current_user.is_authenticated %}
+                <button class="btn btn-sm btn-outline-primary screening-btn"
+                        data-title="{{ job.title }}" data-company="{{ job.company }}"
+                        data-description="{{ job.description[:2000] | e }}">
+                    Q&amp;A
+                </button>
+                <button class="btn btn-sm btn-outline-primary draft-btn"
+                        data-title="{{ job.title }}" data-company="{{ job.company }}"
+                        data-description="{{ job.description[:2000] | e }}">
+                    Draft
+                </button>
+                {% endif %}
+
+                <button class="btn btn-sm btn-outline-dark share-btn"
+                        data-job-key="{{ job.job_key }}"
+                        data-title="{{ job.title }}" data-company="{{ job.company }}"
+                        data-location="{{ job.location or '' }}"
+                        data-description="{{ job.description[:2000] | e }}"
+                        data-apply-url="{{ job.apply_url or '' }}"
+                        data-remote-status="{{ job.remote_status or '' }}"
+                        data-source="{{ job.source or '' }}">
+                    Share
+                </button>
+
+                {% if job.job_key in applied_keys %}
+                <button class="btn btn-sm btn-outline-secondary applied-btn" data-job-key="{{ job.job_key }}" data-applied="true">
+                    Applied
+                </button>
+                {% else %}
+                <button class="btn btn-sm btn-outline-success applied-btn" data-job-key="{{ job.job_key }}"
+                        data-title="{{ job.title }}" data-company="{{ job.company }}" data-applied="false">
+                    Mark Applied
+                </button>
+                {% endif %}
+                {% if job.apply_url %}
+                <a href="{{ job.apply_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-primary apply-link"
+                   data-job-key="{{ job.job_key }}" data-title="{{ job.title }}" data-company="{{ job.company }}">
+                    Apply &rarr;
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>

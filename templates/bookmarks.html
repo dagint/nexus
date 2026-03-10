@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Bookmarked Jobs{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Bookmarked Jobs</h2>
+
+{% if jobs %}
+{% for job in jobs %}
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <h5 class="mb-1">{{ job.title }}
+                    {% if job.match_score %}
+                    <span class="badge bg-primary ms-1">{{ job.match_score }}/100</span>
+                    {% endif %}
+                </h5>
+                <h6 class="text-muted">{{ job.company }}{% if job.location %} &mdash; {{ job.location }}{% endif %}</h6>
+            </div>
+            <div class="d-flex gap-1">
+                {% if job.remote_status == 'remote' %}
+                <span class="badge bg-success">Remote</span>
+                {% endif %}
+                <span class="badge bg-light text-dark border">{{ job.source }}</span>
+            </div>
+        </div>
+
+        {% if job.salary_min or job.salary_max %}
+        <p class="mb-1"><strong>Salary:</strong>
+            {% if job.salary_min and job.salary_max %}${{ "{:,.0f}".format(job.salary_min) }} - ${{ "{:,.0f}".format(job.salary_max) }}
+            {% elif job.salary_min %}From ${{ "{:,.0f}".format(job.salary_min) }}
+            {% elif job.salary_max %}Up to ${{ "{:,.0f}".format(job.salary_max) }}{% endif %}
+        </p>
+        {% endif %}
+
+        {% if job.description %}
+        <p class="small text-muted mb-2">{{ job.description[:300] }}{% if job.description|length > 300 %}...{% endif %}</p>
+        {% endif %}
+
+        <div class="d-flex gap-2">
+            {% if job.apply_url %}
+            <a href="{{ job.apply_url }}" target="_blank" class="btn btn-sm btn-primary">Apply</a>
+            {% endif %}
+            {% if job.job_key not in applied_keys %}
+            <button class="btn btn-sm btn-outline-success apply-from-bookmark" data-job-key="{{ job.job_key }}"
+                    data-title="{{ job.title }}" data-company="{{ job.company }}">Mark Applied</button>
+            {% else %}
+            <span class="badge bg-secondary align-self-center">Applied</span>
+            {% endif %}
+            <button class="btn btn-sm btn-outline-danger unbookmark-btn" data-job-key="{{ job.job_key }}">Remove Bookmark</button>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<p class="text-muted">No bookmarked jobs. Bookmark jobs from search results to save them here.</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.unbookmark-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        fetch('/jobs/' + this.dataset.jobKey + '/bookmark', {method: 'DELETE'})
+            .then(function() { location.reload(); });
+    });
+});
+
+document.querySelectorAll('.apply-from-bookmark').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        fetch('/jobs/' + this.dataset.jobKey + '/applied', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({title: this.dataset.title, company: this.dataset.company})
+        }).then(function() { location.reload(); });
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}{{ job.title }} at {{ job.company }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="card-title">{{ job.title }}</h2>
+                <h5 class="text-muted mb-3">
+                    {{ job.company }}
+                    {% if job.location %} &mdash; {{ job.location }}{% endif %}
+                </h5>
+
+                <div class="d-flex gap-2 mb-3">
+                    {% if job.remote_status == 'remote' %}
+                    <span class="badge bg-success">Remote</span>
+                    {% elif job.remote_status == 'hybrid' %}
+                    <span class="badge bg-info">Hybrid</span>
+                    {% endif %}
+                    <span class="badge bg-light text-dark border">{{ job.source }}</span>
+                    {% if job.match_score %}
+                    <span class="badge bg-primary">Match: {{ job.match_score }}/100</span>
+                    {% endif %}
+                </div>
+
+                {% if job.salary_min or job.salary_max %}
+                <p>
+                    <strong>Salary:</strong>
+                    {% if job.salary_min and job.salary_max %}
+                    ${{ "{:,.0f}".format(job.salary_min) }} - ${{ "{:,.0f}".format(job.salary_max) }}
+                    {% elif job.salary_min %}
+                    From ${{ "{:,.0f}".format(job.salary_min) }}
+                    {% elif job.salary_max %}
+                    Up to ${{ "{:,.0f}".format(job.salary_max) }}
+                    {% endif %}
+                </p>
+                {% endif %}
+
+                <hr>
+                <div style="white-space: pre-wrap;">{{ job.description }}</div>
+
+                {% if job.apply_url %}
+                <hr>
+                <a href="{{ job.apply_url }}" target="_blank" rel="noopener" class="btn btn-primary btn-lg">
+                    Apply for This Job
+                </a>
+                {% endif %}
+            </div>
+            <div class="card-footer text-muted small">
+                Shared from Job Search Tool
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

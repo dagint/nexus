@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Application Pipeline{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Application Pipeline</h2>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">Dashboard</a>
+</div>
+
+<!-- Stage filter tabs -->
+<ul class="nav nav-pills mb-4">
+    <li class="nav-item">
+        <a class="nav-link {{ 'active' if not current_stage }}" href="{{ url_for('pipeline') }}">
+            All ({{ jobs|length }})
+        </a>
+    </li>
+    {% for stage in stages %}
+    {% set count = stats.get(stage, 0) %}
+    <li class="nav-item">
+        <a class="nav-link {{ 'active' if current_stage == stage }}" href="{{ url_for('pipeline', stage=stage) }}">
+            {{ stage|capitalize }} ({{ count }})
+        </a>
+    </li>
+    {% endfor %}
+</ul>
+
+{% if jobs %}
+<div class="table-responsive">
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th>Job</th>
+                <th>Company</th>
+                <th>Stage</th>
+                <th>Applied</th>
+                <th>Notes</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for job in jobs %}
+            <tr>
+                <td>
+                    <strong>{{ job.title }}</strong>
+                    {% if job.location %}<br><small class="text-muted">{{ job.location }}</small>{% endif %}
+                </td>
+                <td>{{ job.company }}</td>
+                <td>
+                    <select class="form-select form-select-sm stage-select" data-job-key="{{ job.job_key }}" style="width: auto">
+                        {% for stage in stages %}
+                        <option value="{{ stage }}" {{ 'selected' if job.stage == stage }}>{{ stage|capitalize }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td><small>{{ job.applied_at[:10] if job.applied_at else '' }}</small></td>
+                <td>
+                    <input type="text" class="form-control form-control-sm notes-input" data-job-key="{{ job.job_key }}"
+                           value="{{ job.notes or '' }}" placeholder="Add notes..."
+                           style="min-width: 150px">
+                </td>
+                <td>
+                    {% if job.apply_url %}
+                    <a href="{{ job.apply_url }}" target="_blank" class="btn btn-sm btn-outline-primary">Open</a>
+                    {% endif %}
+                    <button class="btn btn-sm btn-outline-danger remove-btn" data-job-key="{{ job.job_key }}">Remove</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p class="text-muted">No applications{% if current_stage %} in "{{ current_stage }}" stage{% endif %}. Start by searching for jobs and marking them as applied.</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.stage-select').forEach(function(select) {
+    select.addEventListener('change', function() {
+        fetch('/jobs/' + this.dataset.jobKey + '/stage', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({stage: this.value})
+        });
+    });
+});
+
+document.querySelectorAll('.notes-input').forEach(function(input) {
+    var timeout;
+    input.addEventListener('input', function() {
+        var el = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(function() {
+            fetch('/jobs/' + el.dataset.jobKey + '/notes', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({notes: el.value})
+            });
+        }, 500);
+    });
+});
+
+document.querySelectorAll('.remove-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        if (confirm('Remove this application?')) {
+            fetch('/jobs/' + this.dataset.jobKey + '/applied', {method: 'DELETE'})
+                .then(function() { location.reload(); });
+        }
+    });
+});
+</script>
+{% endblock %}

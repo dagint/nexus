@@ -1,0 +1,45 @@
+"""Job API provider registry.
+
+To add a new API source:
+1. Create a new file in services/apis/ with a class that extends JobAPIProvider
+2. Add it to PROVIDER_CLASSES below
+
+To disable an API source:
+- Remove or comment out its line from PROVIDER_CLASSES
+- Or just don't set its API keys (is_available() will return False)
+"""
+
+import logging
+
+from services.apis.base import JobAPIProvider
+from services.apis.jsearch import JSearchProvider
+from services.apis.remotive import RemotiveProvider
+from services.apis.weworkremotely import WeWorkRemotelyProvider
+from services.apis.adzuna import AdzunaProvider
+
+logger = logging.getLogger(__name__)
+
+# === ADD OR REMOVE PROVIDERS HERE ===
+PROVIDER_CLASSES: list[type[JobAPIProvider]] = [
+    JSearchProvider,
+    RemotiveProvider,
+    WeWorkRemotelyProvider,
+    AdzunaProvider,
+]
+
+
+def get_active_providers() -> list[JobAPIProvider]:
+    """Return instantiated providers that are configured and available."""
+    active = []
+    for cls in PROVIDER_CLASSES:
+        provider = cls()
+        if provider.is_available():
+            active.append(provider)
+        else:
+            logger.info("Provider %s is not available (missing config)", provider.name)
+    return active
+
+
+def get_all_providers() -> list[JobAPIProvider]:
+    """Return all registered providers regardless of availability."""
+    return [cls() for cls in PROVIDER_CLASSES]

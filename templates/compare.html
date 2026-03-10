@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Compare Jobs{% endblock %}
+{% block content %}
+<h2 class="mb-4">Compare Jobs</h2>
+{% if jobs|length < 2 %}
+<div class="alert alert-info">
+    <p>Not enough job data for comparison. Bookmark the jobs you want to compare first, then select them from search results.</p>
+    <a href="/" class="btn btn-primary">Back to Search</a>
+</div>
+{% else %}
+<div class="table-responsive">
+    <table class="table table-bordered align-middle">
+        <thead><tr><th style="width:140px;"></th>{% for job in jobs %}<th>{{ job.title }}</th>{% endfor %}</tr></thead>
+        <tbody>
+            <tr><td><strong>Company</strong></td>{% for job in jobs %}<td>{{ job.company or '-' }}</td>{% endfor %}</tr>
+            <tr><td><strong>Location</strong></td>{% for job in jobs %}<td>{{ job.location or '-' }}</td>{% endfor %}</tr>
+            <tr><td><strong>Remote</strong></td>{% for job in jobs %}<td>{% if job.remote_status == 'remote' %}<span class="badge bg-success">Remote</span>{% elif job.remote_status == 'hybrid' %}<span class="badge bg-info">Hybrid</span>{% else %}On-site{% endif %}</td>{% endfor %}</tr>
+            <tr><td><strong>Salary</strong></td>{% for job in jobs %}<td>{% if job.salary_min and job.salary_max %}${{ "{:,.0f}".format(job.salary_min) }} - ${{ "{:,.0f}".format(job.salary_max) }}{% elif job.salary_min %}From ${{ "{:,.0f}".format(job.salary_min) }}{% elif job.salary_max %}Up to ${{ "{:,.0f}".format(job.salary_max) }}{% else %}-{% endif %}</td>{% endfor %}</tr>
+            <tr><td><strong>Match Score</strong></td>{% for job in jobs %}<td>{{ job.match_score or '-' }}</td>{% endfor %}</tr>
+            <tr><td><strong>Source</strong></td>{% for job in jobs %}<td><span class="badge bg-light text-dark border">{{ job.source or '-' }}</span></td>{% endfor %}</tr>
+            <tr><td><strong>Description</strong></td>{% for job in jobs %}<td class="small">{{ (job.description or '-')[:500] }}</td>{% endfor %}</tr>
+            <tr><td><strong>Apply</strong></td>{% for job in jobs %}<td>{% if job.apply_url %}<a href="{{ job.apply_url }}" target="_blank" class="btn btn-sm btn-primary">Apply</a>{% else %}-{% endif %}</td>{% endfor %}</tr>
+        </tbody>
+    </table>
+</div>
+{% endif %}
+<a href="javascript:history.back()" class="btn btn-outline-secondary mt-3">Back to Results</a>
+{% endblock %}

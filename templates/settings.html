@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <h2 class="mb-4">Settings</h2>
+
+        <form method="POST" action="/settings">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Profile & Preferences</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Name</label>
+                        <input type="text" class="form-control" id="name" name="name"
+                               value="{{ current_user.name or '' }}">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" value="{{ current_user.email }}" disabled>
+                    </div>
+
+                    <div class="mb-3">
+                        <a href="{{ url_for('change_password') }}" class="btn btn-outline-secondary btn-sm">Change Password</a>
+                    </div>
+
+                    <hr>
+
+                    <div class="mb-3">
+                        <label for="timezone" class="form-label">Your Timezone</label>
+                        <input type="text" class="form-control" id="timezone" name="timezone"
+                               value="{{ settings.timezone or 'UTC' }}" placeholder="e.g., US/Eastern, Europe/London">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="max_commute" class="form-label">Max Commute (minutes)</label>
+                        <input type="number" class="form-control" id="max_commute" name="max_commute_minutes"
+                               value="{{ settings.max_commute_minutes or 60 }}" min="0" max="180">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="seniority" class="form-label">Your Seniority Level</label>
+                        <select class="form-select" id="seniority" name="seniority_tier">
+                            {% for tier in ['', 'IC1', 'IC2', 'IC3', 'IC4', 'IC5', 'IC6', 'Staff', 'Principal', 'Director+'] %}
+                            <option value="{{ tier }}" {{ 'selected' if settings.seniority_tier == tier }}>
+                                {{ tier if tier else 'Auto-detect' }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="blocked" class="form-label">Blocked Companies (comma-separated)</label>
+                        <input type="text" class="form-control" id="blocked" name="blocked_companies"
+                               value="{{ settings.blocked_companies or '' }}"
+                               placeholder="e.g., Acme Corp, Bad Company">
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Save Settings</button>
+        </form>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">API Status</h5>
+            </div>
+            <div class="card-body">
+                {% for source, available in api_status.items() %}
+                <div class="d-flex justify-content-between mb-1">
+                    <span>{{ source }}</span>
+                    {% if available %}
+                    <span class="badge bg-success">Configured</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Not configured</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
