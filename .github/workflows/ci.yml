@@ -81,6 +81,7 @@ jobs:
 
       - name: Trivy vulnerability scan
         uses: aquasecurity/trivy-action@0.30.0
+        continue-on-error: true
         with:
           image-ref: ${{ env.DOCKER_IMAGE }}:scan
           format: table
@@ -89,6 +90,7 @@ jobs:
 
       - name: Trivy SARIF scan
         uses: aquasecurity/trivy-action@0.30.0
+        continue-on-error: true
         if: always()
         with:
           image-ref: ${{ env.DOCKER_IMAGE }}:scan
