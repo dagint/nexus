@@ -163,7 +163,7 @@ EXPERIENCE_HIGHLIGHT:
 
 Return ONLY the formatted sections above, nothing else."""
 
-            text = ai_call(prompt, model="claude-sonnet-4-20250514", max_tokens=1500)
+            text = ai_call(prompt, model="claude-sonnet-4-20250514", max_tokens=1500, endpoint="application_draft")
             if not text:
                 raise RuntimeError("API unavailable")
 

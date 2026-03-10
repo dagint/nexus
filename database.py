@@ -9,14 +9,66 @@ from config import Config
 
 logger = logging.getLogger(__name__)
 
+# WAL mode only needs to be set once per database file; track it here.
+_wal_initialized = False
 
-def get_db():
+
+def _new_conn():
+    """Create a new SQLite connection with pragmas."""
+    global _wal_initialized
     conn = sqlite3.connect(Config.DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    if not _wal_initialized:
+        conn.execute("PRAGMA journal_mode=WAL")
+        _wal_initialized = True
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=5000")
     return conn
+
+
+def get_db():
+    """Get a database connection.
+
+    In Flask request context: reuses a per-request connection (closed by teardown).
+    Outside Flask: returns a new connection that the caller must close.
+    """
+    try:
+        from flask import g, has_app_context
+        if has_app_context():
+            if "db" not in g:
+                g.db = _new_conn()
+            return g.db
+    except ImportError:
+        pass
+    return _new_conn()
+
+
+def _is_request_conn(conn):
+    """Check if this connection is the shared Flask per-request connection."""
+    try:
+        from flask import g, has_app_context
+        if has_app_context():
+            return getattr(g, "db", None) is conn
+    except (ImportError, RuntimeError):
+        pass
+    return False
+
+
+def _safe_close(conn):
+    """Close a connection only if it's not the shared Flask request connection."""
+    if not _is_request_conn(conn):
+        conn.close()
+
+
+def close_db(e=None):
+    """Close the per-request DB connection (Flask teardown handler)."""
+    try:
+        from flask import g
+        conn = g.pop("db", None)
+        if conn is not None:
+            conn.close()
+    except (ImportError, RuntimeError):
+        pass
 
 
 def init_db():
@@ -44,6 +96,7 @@ def init_db():
             frequency TEXT DEFAULT 'daily',
             seniority_filter TEXT,
             min_match_score INTEGER,
+            is_active INTEGER DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_notified_at TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -187,10 +240,49 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             UNIQUE(user_id, job_key)
         );
+
+        CREATE TABLE IF NOT EXISTS api_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            provider TEXT NOT NULL,
+            endpoint TEXT NOT NULL,
+            model TEXT,
+            tokens_input INTEGER DEFAULT 0,
+            tokens_output INTEGER DEFAULT 0,
+            estimated_cost_usd REAL DEFAULT 0.0,
+            response_time_ms INTEGER DEFAULT 0,
+            success INTEGER DEFAULT 1,
+            error_message TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_api_usage_provider ON api_usage(provider);
+        CREATE INDEX IF NOT EXISTS idx_api_usage_created_at ON api_usage(created_at);
+        CREATE INDEX IF NOT EXISTS idx_api_usage_user_id ON api_usage(user_id);
+        CREATE INDEX IF NOT EXISTS idx_bookmarked_jobs_user_id ON bookmarked_jobs(user_id);
+        CREATE INDEX IF NOT EXISTS idx_applied_jobs_user_id ON applied_jobs(user_id);
+        CREATE INDEX IF NOT EXISTS idx_dismissed_jobs_user_id ON dismissed_jobs(user_id);
+        CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
     """)
     conn.commit()
-    conn.close()
+
+    # Schema migrations for existing databases
+    _migrate_add_column(conn, "saved_searches", "is_active", "INTEGER DEFAULT 1")
+
+    _safe_close(conn)
     logger.info("Database initialized at %s", Config.DB_PATH)
+
+
+def _migrate_add_column(conn, table, column, col_type):
+    """Add a column to an existing table if it doesn't exist."""
+    try:
+        cols = [row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+        if column not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+            conn.commit()
+            logger.info("Migrated: added %s.%s", table, column)
+    except Exception as e:
+        logger.warning("Migration failed for %s.%s: %s", table, column, e)
 
 
 # --- Users ---
@@ -205,9 +297,9 @@ def create_user(email, password, name=""):
         conn.commit()
         user_id = cursor.lastrowid
     except sqlite3.IntegrityError:
-        conn.close()
+        _safe_close(conn)
         return None  # Email already exists
-    conn.close()
+    _safe_close(conn)
     return user_id
 
 
@@ -216,7 +308,7 @@ def authenticate_user(email, password):
     row = conn.execute(
         "SELECT * FROM users WHERE email = ?", (email.lower().strip(),)
     ).fetchone()
-    conn.close()
+    _safe_close(conn)
     if row and check_password_hash(row["password_hash"], password):
         return dict(row)
     return None
@@ -225,7 +317,7 @@ def authenticate_user(email, password):
 def get_user_by_id(user_id):
     conn = get_db()
     row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-    conn.close()
+    _safe_close(conn)
     return dict(row) if row else None
 
 
@@ -234,7 +326,7 @@ def get_user_by_email(email):
     row = conn.execute(
         "SELECT * FROM users WHERE email = ?", (email.lower().strip(),)
     ).fetchone()
-    conn.close()
+    _safe_close(conn)
     return dict(row) if row else None
 
 
@@ -245,7 +337,7 @@ def update_user_password(user_id, new_password):
         (generate_password_hash(new_password), user_id),
     )
     conn.commit()
-    conn.close()
+    _safe_close(conn)
 
 
 def create_password_reset_token(email):
@@ -263,7 +355,7 @@ def create_password_reset_token(email):
         (user["id"], token_hash, expires_at),
     )
     conn.commit()
-    conn.close()
+    _safe_close(conn)
     return token
 
 
@@ -273,7 +365,7 @@ def validate_reset_token(token):
     row = conn.execute(
         "SELECT * FROM password_reset_tokens WHERE token_hash = ?", (token_hash,)
     ).fetchone()
-    conn.close()
+    _safe_close(conn)
     if not row:
         return None
     if datetime.utcnow() > datetime.fromisoformat(row["expires_at"]):
@@ -282,11 +374,24 @@ def validate_reset_token(token):
 
 
 def consume_reset_token(token):
+    """Atomically validate and consume a reset token. Returns user_id or None."""
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM password_reset_tokens WHERE token_hash = ?", (token_hash,)
+    ).fetchone()
+    if not row:
+        _safe_close(conn)
+        return None
+    if datetime.utcnow() > datetime.fromisoformat(row["expires_at"]):
+        conn.execute("DELETE FROM password_reset_tokens WHERE token_hash = ?", (token_hash,))
+        conn.commit()
+        _safe_close(conn)
+        return None
     conn.execute("DELETE FROM password_reset_tokens WHERE token_hash = ?", (token_hash,))
     conn.commit()
-    conn.close()
+    _safe_close(conn)
+    return row["user_id"]
 
 
 # --- Saved Searches ---
@@ -299,7 +404,7 @@ def create_saved_search(user_id, query, location, remote_only, skills_json, freq
     )
     conn.commit()
     search_id = cursor.lastrowid
-    conn.close()
+    _safe_close(conn)
     return search_id
 
 
@@ -309,17 +414,18 @@ def get_saved_searches(user_id):
         "SELECT * FROM saved_searches WHERE user_id = ? ORDER BY created_at DESC",
         (user_id,),
     ).fetchall()
-    conn.close()
+    _safe_close(conn)
     return rows
 
 
 def get_all_saved_searches():
-    """Get all saved searches across all users (for scheduler)."""
+    """Get all active saved searches across all users (for scheduler)."""
     conn = get_db()
     rows = conn.execute(
-        "SELECT ss.*, u.email FROM saved_searches ss JOIN users u ON ss.user_id = u.id ORDER BY ss.id"
+        "SELECT ss.*, u.email FROM saved_searches ss JOIN users u ON ss.user_id = u.id "
+        "WHERE ss.is_active = 1 ORDER BY ss.id"
     ).fetchall()
-    conn.close()
+    _safe_close(conn)
     return rows
 
 
@@ -330,7 +436,29 @@ def delete_saved_search(search_id, user_id):
         (search_id, user_id),
     )
     conn.commit()
-    conn.close()
+    _safe_close(conn)
+
+
+def toggle_saved_search(search_id, user_id, is_active):
+    """Enable or disable a single alert."""
+    conn = get_db()
+    conn.execute(
+        "UPDATE saved_searches SET is_active = ? WHERE id = ? AND user_id = ?",
+        (int(is_active), search_id, user_id),
+    )
+    conn.commit()
+    _safe_close(conn)
+
+
+def toggle_all_saved_searches(user_id, is_active):
+    """Enable or disable all alerts for a user."""
+    conn = get_db()
+    conn.execute(
+        "UPDATE saved_searches SET is_active = ? WHERE user_id = ?",
+        (int(is_active), user_id),
+    )
+    conn.commit()
+    _safe_close(conn)
 
 
 def update_last_notified(search_id):
@@ -340,7 +468,19 @@ def update_last_notified(search_id):
         (search_id,),
     )
     conn.commit()
-    conn.close()
+    _safe_close(conn)
+
+
+def get_user_email_count_today(user_id):
+    """Count how many digest emails were sent to this user today."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT COUNT(*) as cnt FROM saved_searches "
+        "WHERE user_id = ? AND last_notified_at >= datetime('now', '-24 hours')",
+        (user_id,),
+    ).fetchone()
+    _safe_close(conn)
+    return row["cnt"] if row else 0
 
 
 # --- Seen Jobs ---
@@ -352,13 +492,13 @@ def add_seen_jobs(search_id, job_keys):
         [(search_id, key) for key in job_keys],
     )
     conn.commit()
-    conn.close()
+    _safe_close(conn)
 
 
 def get_seen_job_keys(search_id):
     conn = get_db()
     rows = conn.execute("SELECT job_key FROM seen_jobs WHERE search_id = ?", (search_id,)).fetchall()
-    conn.close()
+    _safe_close(conn)
     return {row["job_key"] for row in rows}
 
 
@@ -377,7 +517,7 @@ def mark_applied(user_id, job_key, title, company, notes="", location="", apply_
         (user_id, job_key, title, company, location, apply_url, stage, notes),
     )
     conn.commit()
-    conn.close()
+    _safe_close(conn)
 
 
 def update_applied_stage(user_id, job_key, stage, notes=None):
@@ -393,7 +533,7 @@ def update_applied_stage(user_id, job_key, stage, notes=None):
             (stage, user_id, job_key),
         )
     conn.commit()
-    conn.close()
+    _safe_close(conn)
 
 
 def update_applied_notes(user_id, job_key, notes):
@@ -403,20 +543,20 @@ def update_applied_notes(user_id, job_key, notes):
         (notes, user_id, job_key),
     )
     conn.commit()
-    conn.close()
+    _safe_close(conn)
 
 
 def unmark_applied(user_id, job_key):
     conn = get_db()
     conn.execute("DELETE FROM applied_jobs WHERE user_id = ? AND job_key = ?", (user_id, job_key))
     conn.commit()
-    conn.close()
+    _safe_close(conn)
 
 
 def get_applied_job_keys(user_id):
     conn = get_db()
     rows = conn.execute("SELECT job_key FROM applied_jobs WHERE user_id = ?", (user_id,)).fetchall()
-    conn.close()
+    _safe_close(conn)
     return {row["job_key"] for row in rows}
 
 
@@ -432,7 +572,7 @@ def get_applied_jobs(user_id, stage=None):
             "SELECT * FROM applied_jobs WHERE user_id = ? ORDER BY updated_at DESC",
             (user_id,),
         ).fetchall()
-    conn.close()
+    _safe_close(conn)
     return rows
 
 
@@ -442,7 +582,7 @@ def get_applied_stats(user_id):
         "SELECT stage, COUNT(*) as count FROM applied_jobs WHERE user_id = ? GROUP BY stage",
         (user_id,),
     ).fetchall()
-    conn.close()
+    _safe_close(conn)
     return {row["stage"]: row["count"] for row in rows}
 
 
@@ -454,7 +594,7 @@ def get_cached_company(company_name):
         "SELECT * FROM company_cache WHERE company_name = ? AND scraped_at > datetime('now', '-7 days')",
         (company_name,),
     ).fetchone()
-    conn.close()
+    _safe_close(conn)
     if row:
         return json.loads(row["data_json"])
     return None
@@ -467,7 +607,7 @@ def cache_company(company_name, data):
         (company_name, json.dumps(data)),
     )
     conn.commit()
-    conn.close()
+    _safe_close(conn)
 
 
 # --- User Settings ---
@@ -478,7 +618,7 @@ def get_user_settings(user_id):
         "SELECT timezone, max_commute_minutes, seniority_tier, blocked_companies FROM users WHERE id = ?",
         (user_id,),
     ).fetchone()
-    conn.close()
+    _safe_close(conn)
     return dict(row) if row else {}
 
 
@@ -492,7 +632,7 @@ def update_user_settings(user_id, **kwargs):
     values = list(fields.values()) + [user_id]
     conn.execute(f"UPDATE users SET {set_clause} WHERE id = ?", values)
     conn.commit()
-    conn.close()
+    _safe_close(conn)
 
 
 # --- Resumes ---
@@ -509,7 +649,7 @@ def save_resume(user_id, raw_text, skills_json=None, name="Default Resume", file
     )
     conn.commit()
     resume_id = cursor.lastrowid
-    conn.close()
+    _safe_close(conn)
     return resume_id
 
 
@@ -519,7 +659,7 @@ def get_resumes(user_id):
         "SELECT * FROM resumes WHERE user_id = ? ORDER BY is_default DESC, updated_at DESC",
         (user_id,),
     ).fetchall()
-    conn.close()
+    _safe_close(conn)
     return rows
 
 
@@ -528,7 +668,7 @@ def get_resume(resume_id, user_id):
     row = conn.execute(
         "SELECT * FROM resumes WHERE id = ? AND user_id = ?", (resume_id, user_id)
     ).fetchone()
-    conn.close()
+    _safe_close(conn)
     return dict(row) if row else None
 
 
@@ -541,7 +681,7 @@ def get_default_resume(user_id):
         row = conn.execute(
             "SELECT * FROM resumes WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1", (user_id,)
         ).fetchone()
-    conn.close()
+    _safe_close(conn)
     return dict(row) if row else None
 
 
@@ -550,14 +690,14 @@ def set_default_resume(resume_id, user_id):
     conn.execute("UPDATE resumes SET is_default = 0 WHERE user_id = ?", (user_id,))
     conn.execute("UPDATE resumes SET is_default = 1 WHERE id = ? AND user_id = ?", (resume_id, user_id))
     conn.commit()
-    conn.close()
+    _safe_close(conn)
 
 
 def delete_resume(resume_id, user_id):
     conn = get_db()
     conn.execute("DELETE FROM resumes WHERE id = ? AND user_id = ?", (resume_id, user_id))
     conn.commit()
-    conn.close()
+    _safe_close(conn)
 
 
 def update_resume(resume_id, user_id, raw_text, skills_json=None, name=None):
@@ -573,7 +713,7 @@ def update_resume(resume_id, user_id, raw_text, skills_json=None, name=None):
             (raw_text, skills_json, resume_id, user_id),
         )
     conn.commit()
-    conn.close()
+    _safe_close(conn)
 
 
 # --- Search History ---
@@ -585,7 +725,7 @@ def add_search_history(user_id, query, location, remote_only, resume_id=None, re
         (user_id, query, location, int(remote_only), resume_id, result_count),
     )
     conn.commit()
-    conn.close()
+    _safe_close(conn)
 
 
 def get_search_history(user_id, limit=20):
@@ -596,7 +736,7 @@ def get_search_history(user_id, limit=20):
            WHERE sh.user_id = ? ORDER BY sh.searched_at DESC LIMIT ?""",
         (user_id, limit),
     ).fetchall()
-    conn.close()
+    _safe_close(conn)
     return rows
 
 
@@ -615,14 +755,14 @@ def bookmark_job(user_id, job_data):
          job_data.get("description", "")[:1000], job_data.get("match_score")),
     )
     conn.commit()
-    conn.close()
+    _safe_close(conn)
 
 
 def unbookmark_job(user_id, job_key):
     conn = get_db()
     conn.execute("DELETE FROM bookmarked_jobs WHERE user_id = ? AND job_key = ?", (user_id, job_key))
     conn.commit()
-    conn.close()
+    _safe_close(conn)
 
 
 def get_bookmarked_jobs(user_id):
@@ -631,14 +771,14 @@ def get_bookmarked_jobs(user_id):
         "SELECT * FROM bookmarked_jobs WHERE user_id = ? ORDER BY bookmarked_at DESC",
         (user_id,),
     ).fetchall()
-    conn.close()
+    _safe_close(conn)
     return rows
 
 
 def get_bookmarked_job_keys(user_id):
     conn = get_db()
     rows = conn.execute("SELECT job_key FROM bookmarked_jobs WHERE user_id = ?", (user_id,)).fetchall()
-    conn.close()
+    _safe_close(conn)
     return {row["job_key"] for row in rows}
 
 
@@ -656,7 +796,7 @@ def save_resume_version(resume_id, user_id, raw_text, skills_json=None, change_n
         (resume_id, user_id, next_version, raw_text, skills_json, change_note),
     )
     conn.commit()
-    conn.close()
+    _safe_close(conn)
     return next_version
 
 
@@ -666,7 +806,7 @@ def get_resume_versions(resume_id, user_id):
         "SELECT * FROM resume_versions WHERE resume_id = ? AND user_id = ? ORDER BY version_number DESC",
         (resume_id, user_id),
     ).fetchall()
-    conn.close()
+    _safe_close(conn)
     return rows
 
 
@@ -676,7 +816,7 @@ def get_resume_version(version_id, user_id):
         "SELECT * FROM resume_versions WHERE id = ? AND user_id = ?",
         (version_id, user_id),
     ).fetchone()
-    conn.close()
+    _safe_close(conn)
     return dict(row) if row else None
 
 
@@ -697,7 +837,7 @@ def create_shared_job(user_id, job_data):
          job_data.get("match_score")),
     )
     conn.commit()
-    conn.close()
+    _safe_close(conn)
     return token
 
 
@@ -706,8 +846,19 @@ def get_shared_job(token):
     row = conn.execute(
         "SELECT * FROM shared_jobs WHERE share_token = ?", (token,)
     ).fetchone()
-    conn.close()
+    _safe_close(conn)
     return dict(row) if row else None
+
+
+def purge_old_shared_jobs(days=30):
+    """Delete shared_jobs older than the given number of days."""
+    conn = get_db()
+    conn.execute(
+        "DELETE FROM shared_jobs WHERE created_at < datetime('now', ?)",
+        (f"-{days} days",),
+    )
+    conn.commit()
+    _safe_close(conn)
 
 
 # --- Notifications ---
@@ -719,7 +870,7 @@ def create_notification(user_id, message, link=None):
         (user_id, message, link),
     )
     conn.commit()
-    conn.close()
+    _safe_close(conn)
 
 
 def get_unread_notifications(user_id, limit=10):
@@ -728,7 +879,7 @@ def get_unread_notifications(user_id, limit=10):
         "SELECT * FROM notifications WHERE user_id = ? AND is_read = 0 ORDER BY created_at DESC LIMIT ?",
         (user_id, limit),
     ).fetchall()
-    conn.close()
+    _safe_close(conn)
     return rows
 
 
@@ -738,7 +889,7 @@ def get_unread_count(user_id):
         "SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0",
         (user_id,),
     ).fetchone()
-    conn.close()
+    _safe_close(conn)
     return row["count"] if row else 0
 
 
@@ -756,7 +907,7 @@ def mark_notifications_read(user_id, notification_ids=None):
             (user_id,),
         )
     conn.commit()
-    conn.close()
+    _safe_close(conn)
 
 
 # --- Role Velocity ---
@@ -771,20 +922,20 @@ def dismiss_job(user_id, job_key, title="", company=""):
         (user_id, job_key, title, company),
     )
     conn.commit()
-    conn.close()
+    _safe_close(conn)
 
 
 def undismiss_job(user_id, job_key):
     conn = get_db()
     conn.execute("DELETE FROM dismissed_jobs WHERE user_id = ? AND job_key = ?", (user_id, job_key))
     conn.commit()
-    conn.close()
+    _safe_close(conn)
 
 
 def get_dismissed_job_keys(user_id):
     conn = get_db()
     rows = conn.execute("SELECT job_key FROM dismissed_jobs WHERE user_id = ?", (user_id,)).fetchall()
-    conn.close()
+    _safe_close(conn)
     return {row["job_key"] for row in rows}
 
 
@@ -794,11 +945,101 @@ def get_dismissed_jobs(user_id):
         "SELECT * FROM dismissed_jobs WHERE user_id = ? ORDER BY dismissed_at DESC",
         (user_id,),
     ).fetchall()
-    conn.close()
+    _safe_close(conn)
     return rows
 
 
 # --- Role Velocity ---
+
+# --- API Usage ---
+
+def log_api_usage(user_id, provider, endpoint, model=None,
+                  tokens_input=0, tokens_output=0, estimated_cost_usd=0.0,
+                  response_time_ms=0, success=1, error_message=None):
+    conn = get_db()
+    conn.execute(
+        """INSERT INTO api_usage
+           (user_id, provider, endpoint, model, tokens_input, tokens_output,
+            estimated_cost_usd, response_time_ms, success, error_message)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (user_id, provider, endpoint, model, tokens_input, tokens_output,
+         estimated_cost_usd, response_time_ms, success, error_message),
+    )
+    conn.commit()
+    _safe_close(conn)
+
+
+def purge_old_api_usage(days=90):
+    """Delete api_usage rows older than the given number of days."""
+    conn = get_db()
+    conn.execute(
+        "DELETE FROM api_usage WHERE created_at < datetime('now', ?)",
+        (f"-{days} days",),
+    )
+    conn.commit()
+    _safe_close(conn)
+
+
+def _usage_where(user_id, days):
+    """Build a WHERE clause for api_usage queries."""
+    where = "WHERE created_at > datetime('now', ?)"
+    params = [f"-{days} days"]
+    if user_id is not None:
+        where += " AND user_id = ?"
+        params.append(user_id)
+    return where, params
+
+
+def get_api_usage_summary(user_id=None, days=30):
+    """Aggregated cost and call count by provider."""
+    conn = get_db()
+    where, params = _usage_where(user_id, days)
+    rows = conn.execute(
+        f"""SELECT provider,
+                   COUNT(*) as call_count,
+                   SUM(tokens_input) as total_input_tokens,
+                   SUM(tokens_output) as total_output_tokens,
+                   SUM(estimated_cost_usd) as total_cost,
+                   AVG(response_time_ms) as avg_response_ms,
+                   SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as error_count
+            FROM api_usage {where}
+            GROUP BY provider ORDER BY total_cost DESC""",
+        params,
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+def get_api_usage_daily(user_id=None, days=30):
+    """Daily cost and call count totals."""
+    conn = get_db()
+    where, params = _usage_where(user_id, days)
+    rows = conn.execute(
+        f"""SELECT DATE(created_at) as date,
+                   COUNT(*) as call_count,
+                   SUM(estimated_cost_usd) as total_cost,
+                   SUM(tokens_input + tokens_output) as total_tokens
+            FROM api_usage {where}
+            GROUP BY DATE(created_at) ORDER BY date""",
+        params,
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+def get_api_usage_recent(user_id=None, days=30, limit=50):
+    """Recent API calls log."""
+    conn = get_db()
+    where, params = _usage_where(user_id, days)
+    params.append(limit)
+    rows = conn.execute(
+        f"""SELECT * FROM api_usage {where}
+            ORDER BY created_at DESC LIMIT ?""",
+        params,
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
 
 def get_role_velocity(company, title, months=6):
     conn = get_db()
@@ -808,5 +1049,23 @@ def get_role_velocity(company, title, months=6):
            WHERE sj.job_key LIKE ? AND sj.first_seen_at > datetime('now', ?)""",
         (f"%{company}%{title}%", f"-{months} months"),
     ).fetchone()
-    conn.close()
+    _safe_close(conn)
     return row["count"] if row else 0
+
+
+def get_role_velocities_batch(company_title_pairs, months=6):
+    """Batch role velocity lookup. Returns dict of (company, title) -> count."""
+    if not company_title_pairs:
+        return {}
+    conn = get_db()
+    cutoff = f"-{months} months"
+    results = {}
+    for company, title in company_title_pairs:
+        row = conn.execute(
+            """SELECT COUNT(DISTINCT job_key) as count FROM seen_jobs
+               WHERE job_key LIKE ? AND first_seen_at > datetime('now', ?)""",
+            (f"%{company}%{title}%", cutoff),
+        ).fetchone()
+        results[(company, title)] = row["count"] if row else 0
+    _safe_close(conn)
+    return results

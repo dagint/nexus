@@ -1,5 +1,6 @@
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 from bs4 import BeautifulSoup
@@ -7,6 +8,8 @@ from bs4 import BeautifulSoup
 from database import get_cached_company, cache_company
 
 logger = logging.getLogger(__name__)
+
+_MAX_ENRICHMENT_WORKERS = 5
 
 
 def enrich_company(company_name):
@@ -25,20 +28,37 @@ def enrich_company(company_name):
 
 
 def enrich_jobs(jobs):
-    """Enrich a list of jobs with company data."""
-    seen_companies = {}
-    for job in jobs:
-        company = job.get("company", "")
-        if company in seen_companies:
-            job["company_info"] = seen_companies[company]
+    """Enrich a list of jobs with company data (parallel HTTP scrapes)."""
+    unique_companies = list({j.get("company", "") for j in jobs})
+    company_info = {}
+
+    # Separate cached from uncached
+    uncached = []
+    for name in unique_companies:
+        if not name or name == "Unknown Company":
+            company_info[name] = None
+            continue
+        cached = get_cached_company(name)
+        if cached is not None:
+            company_info[name] = cached
         else:
-            try:
-                info = enrich_company(company)
-                seen_companies[company] = info
-                job["company_info"] = info
-            except Exception as e:
-                logger.warning("Failed to enrich %s: %s", company, e)
-                job["company_info"] = None
+            uncached.append(name)
+
+    # Scrape uncached companies in parallel
+    if uncached:
+        workers = min(_MAX_ENRICHMENT_WORKERS, len(uncached))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {executor.submit(enrich_company, name): name for name in uncached}
+            for future in as_completed(futures):
+                name = futures[future]
+                try:
+                    company_info[name] = future.result()
+                except Exception as e:
+                    logger.warning("Failed to enrich %s: %s", name, e)
+                    company_info[name] = None
+
+    for job in jobs:
+        job["company_info"] = company_info.get(job.get("company", ""))
     return jobs
 
 

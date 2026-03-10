@@ -54,6 +54,7 @@ class _LRUCache:
 
 
 _cache = _LRUCache()
+_executor = ThreadPoolExecutor(max_workers=5)
 
 
 class APIError(Exception):
@@ -73,26 +74,43 @@ def search_all(query, location, remote_only=False, date_posted="month", page=1):
                 len(providers), [p.name for p in providers])
 
     all_results = []
-    with ThreadPoolExecutor(max_workers=len(providers) or 1) as executor:
-        futures = {}
-        for provider in providers:
-            future = executor.submit(
-                provider.search, query, location, remote_only, date_posted, page,
-            )
-            futures[future] = provider.name
+    submit_time = time.time()
+    futures = {}
+    for provider in providers:
+        future = _executor.submit(
+            provider.search, query, location, remote_only, date_posted, page,
+        )
+        futures[future] = provider.name
 
-        for future in as_completed(futures):
-            source = futures[future]
+    from services.usage_tracker import log_search_call
+
+    for future in as_completed(futures):
+        source = futures[future]
+        try:
+            results = future.result()
+            elapsed_ms = int((time.time() - submit_time) * 1000)
+            logger.info("API %s returned %d results in %dms", source, len(results), elapsed_ms)
+            all_results.extend(results)
             try:
-                start = time.time()
-                results = future.result()
-                duration = time.time() - start
-                logger.info("API %s returned %d results in %.2fs", source, len(results), duration)
-                all_results.extend(results)
-            except Exception as e:
-                logger.error("API %s failed: %s", source, e)
+                log_search_call(source, elapsed_ms, success=True)
+            except Exception:
+                pass
+        except Exception as e:
+            elapsed_ms = int((time.time() - submit_time) * 1000)
+            logger.error("API %s failed: %s", source, e)
+            try:
+                log_search_call(source, elapsed_ms, success=False, error_message=str(e)[:200])
+            except Exception:
+                pass
 
-    all_results = _deduplicate(all_results)
+    # Lightweight dedup by job_key only; full similarity dedup happens in deduplicator.py
+    seen_keys = set()
+    unique_results = []
+    for job in all_results:
+        if job["job_key"] not in seen_keys:
+            seen_keys.add(job["job_key"])
+            unique_results.append(job)
+    all_results = unique_results
 
     _cache.set(cache_key, all_results)
     logger.info("Total results after dedup: %d (cache size: %d)", len(all_results), _cache.size)

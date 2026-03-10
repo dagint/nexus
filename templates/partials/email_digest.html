@@ -3,7 +3,15 @@
 <head><meta charset="utf-8"></head>
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
     <h2 style="color:#333">Job Alert: {{ new_count }} new matches</h2>
+    {% if is_consolidated is defined and is_consolidated and search_queries %}
+    <p>From your alerts:
+        {% for q in search_queries %}
+        <span style="display:inline-block;background:#e9ecef;padding:2px 8px;border-radius:4px;margin:2px;font-size:13px">{{ q }}</span>
+        {% endfor %}
+    </p>
+    {% else %}
     <p>Search: <strong>{{ search_query }}</strong></p>
+    {% endif %}
 
     <!-- Summary stats -->
     <div style="background:#f8f9fa;border-radius:8px;padding:12px;margin-bottom:16px">

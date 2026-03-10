@@ -290,7 +290,7 @@ Make the technical questions specific to the technologies and skills mentioned i
 Make the talking points reference the candidate's actual experience from their resume.
 Return ONLY valid JSON, no markdown or other text."""
 
-        response_text = ai_call(prompt, model="claude-sonnet-4-20250514", max_tokens=2000)
+        response_text = ai_call(prompt, model="claude-sonnet-4-20250514", max_tokens=2000, endpoint="interview_prep")
         if not response_text:
             return None
 

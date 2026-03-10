@@ -186,7 +186,7 @@ Return answers in this exact format (one per question, numbered to match):
 2. [answer to question 2]
 ...and so on. Return ONLY the numbered answers, no other text."""
 
-            response_text = ai_call(prompt, model="claude-sonnet-4-20250514", max_tokens=2000)
+            response_text = ai_call(prompt, model="claude-sonnet-4-20250514", max_tokens=2000, endpoint="screening_answers")
             if not response_text:
                 raise RuntimeError("API unavailable")
             # Parse numbered answers
