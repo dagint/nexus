@@ -198,7 +198,7 @@ def create_alert():
 
     create_saved_search(
         current_user.id, query, location, remote_only,
-        frequency=frequency,
+        skills_json="[]", frequency=frequency,
     )
     flash("Alert created! You'll be notified of new matches.", "success")
     return redirect(url_for("alerts"))
