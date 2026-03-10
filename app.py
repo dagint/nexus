@@ -1211,7 +1211,7 @@ def download_ics(job_key):
 
     ics = f"""BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:-//Job Search Tool//EN
+PRODID:-//Nexus//EN
 BEGIN:VEVENT
 DTSTART:{interview_dt.strftime('%Y%m%dT%H%M%S')}
 DTEND:{end_dt.strftime('%Y%m%dT%H%M%S')}

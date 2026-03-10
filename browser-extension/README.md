@@ -1,12 +1,12 @@
-# Job Search Tool - Browser Extension
+# Nexus - Browser Extension
 
-A Chrome extension that lets you save job listings directly from supported job sites to your Job Search Tool dashboard.
+A Chrome extension that lets you save job listings directly from supported job sites to your Nexus dashboard.
 
 ## Features
 
 - One-click saving of job listings from supported sites
 - Automatic extraction of job title, company, location, and description
-- Floating "Save to Job Search Tool" button on matching pages
+- Floating "Save to Nexus" button on matching pages
 - Quick access to your dashboard from the popup
 
 ## Supported Job Sites
@@ -30,11 +30,11 @@ A Chrome extension that lets you save job listings directly from supported job s
 ## Configuration
 
 1. Click the extension icon in the Chrome toolbar
-2. Enter your Job Search Tool server URL (e.g., `http://localhost:5000`)
+2. Enter your Nexus server URL (e.g., `http://localhost:5000`)
 3. The URL is saved automatically
 
 ## Usage
 
 - **From the popup:** Click "Save Current Job" while viewing a job listing to extract and save it
-- **From the page:** Click the floating "Save to Job Search Tool" button that appears on supported sites
-- **Open Dashboard:** Click "Open Dashboard" in the popup to jump to your Job Search Tool dashboard
+- **From the page:** Click the floating "Save to Nexus" button that appears on supported sites
+- **Open Dashboard:** Click "Open Dashboard" in the popup to jump to your Nexus dashboard

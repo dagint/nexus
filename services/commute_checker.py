@@ -13,7 +13,7 @@ _geocoder = None
 def _get_geocoder():
     global _geocoder
     if _geocoder is None:
-        _geocoder = Nominatim(user_agent="job-search-tool", timeout=5)
+        _geocoder = Nominatim(user_agent="nexus-job-search", timeout=5)
     return _geocoder
 
 

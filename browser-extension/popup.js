@@ -65,7 +65,7 @@ saveJobBtn.addEventListener("click", async () => {
     // Add the source URL
     jobData.apply_url = jobData.apply_url || tab.url;
 
-    showStatus("Saving to Job Search Tool...", "success");
+    showStatus("Saving to Nexus...", "success");
 
     const res = await fetch(`${serverUrl}/jobs/share`, {
       method: "POST",

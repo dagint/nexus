@@ -1,4 +1,4 @@
-// Job Search Tool Helper - Content Script
+// Nexus Helper - Content Script
 // Extracts job information from supported job listing sites.
 
 (function () {
@@ -203,7 +203,7 @@
 
     const btn = document.createElement("button");
     btn.id = "jst-floating-save-btn";
-    btn.textContent = "Save to Job Search Tool";
+    btn.textContent = "Save to Nexus";
     btn.addEventListener("click", async () => {
       btn.textContent = "Saving...";
       btn.disabled = true;
@@ -215,7 +215,7 @@
         if (!serverUrl) {
           btn.textContent = "Set server URL in extension popup";
           setTimeout(() => {
-            btn.textContent = "Save to Job Search Tool";
+            btn.textContent = "Save to Nexus";
             btn.disabled = false;
           }, 3000);
           return;
@@ -235,7 +235,7 @@
         btn.textContent = "Saved!";
         btn.style.background = "#63a382";
         setTimeout(() => {
-          btn.textContent = "Save to Job Search Tool";
+          btn.textContent = "Save to Nexus";
           btn.style.background = "#75b798";
           btn.disabled = false;
         }, 3000);
@@ -243,7 +243,7 @@
         btn.textContent = "Error - try again";
         btn.style.background = "#dc3545";
         setTimeout(() => {
-          btn.textContent = "Save to Job Search Tool";
+          btn.textContent = "Save to Nexus";
           btn.style.background = "#75b798";
           btn.disabled = false;
         }, 3000);
