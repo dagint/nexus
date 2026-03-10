@@ -13,7 +13,7 @@
         </p>
     </div>
     <div class="d-flex gap-2">
-        <a href="{{ url_for('resumes') }}" class="btn btn-outline-secondary">Back to Resumes</a>
+        <a href="{{ url_for('resumes.resumes') }}" class="btn btn-outline-secondary">Back to Resumes</a>
         {% if not resume.is_default %}
         <form method="POST" action="/resumes/{{ resume.id }}/default" class="d-inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

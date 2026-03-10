@@ -27,7 +27,7 @@
                     </div>
 
                     <div class="mb-3">
-                        <a href="{{ url_for('change_password') }}" class="btn btn-outline-secondary btn-sm">Change Password</a>
+                        <a href="{{ url_for('auth.change_password') }}" class="btn btn-outline-secondary btn-sm">Change Password</a>
                     </div>
 
                     <div class="form-check mb-3">
@@ -161,8 +161,8 @@
                 <h5 class="mb-0">Integrations</h5>
             </div>
             <div class="card-body">
-                <a href="{{ url_for('webhooks_settings') }}" class="btn btn-outline-primary btn-sm me-2">Manage Webhooks</a>
-                <a href="{{ url_for('teams_list') }}" class="btn btn-outline-primary btn-sm">Manage Teams</a>
+                <a href="{{ url_for('settings.webhooks_settings') }}" class="btn btn-outline-primary btn-sm me-2">Manage Webhooks</a>
+                <a href="{{ url_for('teams.teams_list') }}" class="btn btn-outline-primary btn-sm">Manage Teams</a>
             </div>
         </div>
 
@@ -170,7 +170,7 @@
         <div class="card mt-4">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">API Tokens</h5>
-                <form method="POST" action="{{ url_for('create_api_token_route') }}" class="d-inline">
+                <form method="POST" action="{{ url_for('settings.create_api_token_route') }}" class="d-inline">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-sm btn-outline-success">Generate Token</button>
                 </form>
@@ -200,7 +200,7 @@
                             <td><small>{{ token.created_at[:10] }}</small></td>
                             <td><small>{{ token.last_used_at[:10] if token.last_used_at else 'Never' }}</small></td>
                             <td>
-                                <form method="POST" action="{{ url_for('delete_api_token_route', tid=token.id) }}" class="d-inline">
+                                <form method="POST" action="{{ url_for('settings.delete_api_token_route', tid=token.id) }}" class="d-inline">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <button type="submit" class="btn btn-sm btn-outline-danger"
                                             onclick="return confirm('Revoke this token?')">Revoke</button>
@@ -234,7 +234,7 @@
                 </ul>
                 {% else %}
                 <p class="text-muted small">No connected accounts.</p>
-                <a href="{{ url_for('google_login') }}" class="btn btn-outline-dark btn-sm">Link Google Account</a>
+                <a href="{{ url_for('auth.google_login') }}" class="btn btn-outline-dark btn-sm">Link Google Account</a>
                 {% endif %}
             </div>
         </div>

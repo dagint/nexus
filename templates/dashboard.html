@@ -50,7 +50,7 @@
             {% for stage in stages %}
             {% set count = stats.get(stage, 0) %}
             <div class="col">
-                <a href="{{ url_for('pipeline', stage=stage) }}" class="text-decoration-none">
+                <a href="{{ url_for('pipeline.pipeline', stage=stage) }}" class="text-decoration-none">
                     <div class="h4 mb-0 {{ 'text-success' if stage == 'offer' else 'text-danger' if stage == 'rejected' else '' }}">
                         {{ count }}
                     </div>
@@ -80,7 +80,7 @@
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">Due Follow-ups</h5>
-        <a href="{{ url_for('pipeline') }}" class="btn btn-sm btn-outline-primary">Pipeline</a>
+        <a href="{{ url_for('pipeline.pipeline') }}" class="btn btn-sm btn-outline-primary">Pipeline</a>
     </div>
     <div class="card-body">
         {% for fu in due_follow_ups %}
@@ -112,7 +112,7 @@
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">Recent Applications</h5>
-                <a href="{{ url_for('pipeline') }}" class="btn btn-sm btn-outline-primary">View All</a>
+                <a href="{{ url_for('pipeline.pipeline') }}" class="btn btn-sm btn-outline-primary">View All</a>
             </div>
             <div class="card-body">
                 {% if recent_applied %}
@@ -139,14 +139,14 @@
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">Recent Searches</h5>
-                <a href="{{ url_for('history') }}" class="btn btn-sm btn-outline-primary">View All</a>
+                <a href="{{ url_for('search.history') }}" class="btn btn-sm btn-outline-primary">View All</a>
             </div>
             <div class="card-body">
                 {% if recent_history %}
                 {% for s in recent_history %}
                 <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
                     <div>
-                        <a href="{{ url_for('search', query=s.query, location=s.location or '') }}">{{ s.query }}</a>
+                        <a href="{{ url_for('search.search', query=s.query, location=s.location or '') }}">{{ s.query }}</a>
                         {% if s.location %}<small class="text-muted"> in {{ s.location }}</small>{% endif %}
                     </div>
                     <small class="text-muted">{{ s.result_count }} results</small>

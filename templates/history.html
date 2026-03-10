@@ -7,9 +7,9 @@
     <h2>Search History</h2>
     <div>
         {% if show_trends %}
-        <a href="{{ url_for('history') }}" class="btn btn-outline-secondary btn-sm">Hide Trends</a>
+        <a href="{{ url_for('search.history') }}" class="btn btn-outline-secondary btn-sm">Hide Trends</a>
         {% else %}
-        <a href="{{ url_for('history_trends') }}" class="btn btn-outline-primary btn-sm">Show Trends</a>
+        <a href="{{ url_for('search.history_trends') }}" class="btn btn-outline-primary btn-sm">Show Trends</a>
         {% endif %}
     </div>
 </div>
@@ -36,7 +36,7 @@
                         {% for p in popular %}
                         <tr>
                             <td>
-                                <a href="{{ url_for('search', query=p.query) }}">{{ p.query }}</a>
+                                <a href="{{ url_for('search.search', query=p.query) }}">{{ p.query }}</a>
                             </td>
                             <td><span class="badge bg-primary">{{ p.count }}</span></td>
                             <td>{{ p.avg_results }}</td>
@@ -129,7 +129,7 @@
                 <td>{{ s.result_count }}</td>
                 <td><small>{{ s.searched_at[:16] }}</small></td>
                 <td>
-                    <a href="{{ url_for('search', query=s.query, location=s.location or '', remote_only='true' if s.remote_only else '') }}"
+                    <a href="{{ url_for('search.search', query=s.query, location=s.location or '', remote_only='true' if s.remote_only else '') }}"
                        class="btn btn-sm btn-outline-primary">Re-run</a>
                 </td>
             </tr>
