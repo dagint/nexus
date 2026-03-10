@@ -5,7 +5,6 @@ import threading
 import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from difflib import SequenceMatcher
 
 from services.apis.registry import get_active_providers, get_all_providers
 
@@ -131,26 +130,3 @@ def get_unavailable_sources():
 
 def _cache_key(*args):
     return hashlib.md5(json.dumps(args, sort_keys=True).encode()).hexdigest()
-
-
-def _deduplicate(jobs):
-    """Remove duplicate jobs by normalized title + company similarity."""
-    seen = []
-    result = []
-
-    for job in jobs:
-        key = (job["title"].lower().strip(), job["company"].lower().strip())
-        is_dup = False
-        for seen_key, seen_idx in seen:
-            title_sim = SequenceMatcher(None, key[0], seen_key[0]).ratio()
-            company_sim = SequenceMatcher(None, key[1], seen_key[1]).ratio()
-            if title_sim >= 0.85 and company_sim >= 0.85:
-                if len(job.get("description", "")) > len(result[seen_idx].get("description", "")):
-                    result[seen_idx] = job
-                is_dup = True
-                break
-        if not is_dup:
-            seen.append((key, len(result)))
-            result.append(job)
-
-    return result

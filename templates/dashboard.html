@@ -208,7 +208,7 @@ if (autofillBtn) {
             .then(function(data) {
                 if (data.error) {
                     document.getElementById('autofillContent').innerHTML =
-                        '<div class="alert alert-warning">' + data.error + '</div>';
+                        '<div class="alert alert-warning">' + escapeHtml(data.error) + '</div>';
                     return;
                 }
                 var html = '';
@@ -227,8 +227,8 @@ if (autofillBtn) {
                 fields.forEach(function(f) {
                     if (f[1]) {
                         html += '<div class="d-flex justify-content-between align-items-start mb-2 pb-2 border-bottom">';
-                        html += '<div><strong class="small">' + f[0] + '</strong><br><span>' + f[1] + '</span></div>';
-                        html += '<button class="btn btn-sm btn-outline-secondary copy-field-btn flex-shrink-0 ms-2" data-value="' + f[1].replace(/"/g, '&quot;') + '">Copy</button>';
+                        html += '<div><strong class="small">' + escapeHtml(f[0]) + '</strong><br><span>' + escapeHtml(f[1]) + '</span></div>';
+                        html += '<button class="btn btn-sm btn-outline-secondary copy-field-btn flex-shrink-0 ms-2" data-value="' + escapeHtml(f[1]) + '">Copy</button>';
                         html += '</div>';
                     }
                 });
@@ -248,7 +248,7 @@ if (autofillBtn) {
             })
             .catch(function(err) {
                 document.getElementById('autofillContent').innerHTML =
-                    '<div class="alert alert-danger">Failed to load data: ' + err.message + '</div>';
+                    '<div class="alert alert-danger">Failed to load data: ' + escapeHtml(err.message) + '</div>';
             });
     });
 }

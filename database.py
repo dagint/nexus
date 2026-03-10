@@ -261,8 +261,11 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_api_usage_user_id ON api_usage(user_id);
         CREATE INDEX IF NOT EXISTS idx_bookmarked_jobs_user_id ON bookmarked_jobs(user_id);
         CREATE INDEX IF NOT EXISTS idx_applied_jobs_user_id ON applied_jobs(user_id);
+        CREATE INDEX IF NOT EXISTS idx_applied_jobs_user_stage ON applied_jobs(user_id, stage);
         CREATE INDEX IF NOT EXISTS idx_dismissed_jobs_user_id ON dismissed_jobs(user_id);
         CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+        CREATE INDEX IF NOT EXISTS idx_saved_searches_user_active ON saved_searches(user_id, is_active);
+        CREATE INDEX IF NOT EXISTS idx_search_history_user_id ON search_history(user_id);
 
         CREATE TABLE IF NOT EXISTS search_templates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

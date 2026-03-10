@@ -1,5 +1,11 @@
 // Nexus - Client-side filtering and interactions
 
+// HTML escape to prevent XSS when inserting dynamic content
+function escapeHtml(str) {
+    if (str == null) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // CSRF-aware fetch wrapper
 function csrfFetch(url, options) {
     options = options || {};

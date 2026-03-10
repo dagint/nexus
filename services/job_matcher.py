@@ -2,12 +2,14 @@ import json
 import logging
 import os
 import re
+import threading
 
 logger = logging.getLogger(__name__)
 
 _role_aliases = None
 _MAX_CLAUDE_TITLE_CALLS = 10
 _claude_title_call_count = 0
+_title_call_lock = threading.Lock()
 
 
 def _load_role_aliases():
@@ -123,7 +125,8 @@ def _apply_weight(raw_score, max_score, weight):
 def score_jobs(jobs, resume_data, user_prefs=None, preference_profile=None, scoring_weights=None):
     """Score and tier all jobs, filtering out low matches."""
     global _claude_title_call_count
-    _claude_title_call_count = 0
+    with _title_call_lock:
+        _claude_title_call_count = 0
     scored = [score_job(job, resume_data, user_prefs, preference_profile, scoring_weights) for job in jobs]
     # Filter out low matches
     scored = [j for j in scored if j["match_tier"] != "low"]
@@ -272,9 +275,10 @@ def _score_title(job, resume_data):
 def _claude_title_match(job_title, resume_titles):
     """Use Claude to assess title relevance for ambiguous cases."""
     global _claude_title_call_count
-    if _claude_title_call_count >= _MAX_CLAUDE_TITLE_CALLS:
-        return None
-    _claude_title_call_count += 1
+    with _title_call_lock:
+        if _claude_title_call_count >= _MAX_CLAUDE_TITLE_CALLS:
+            return None
+        _claude_title_call_count += 1
 
     from services.ai_client import is_available, call
 

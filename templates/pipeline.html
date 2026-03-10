@@ -220,10 +220,10 @@ function loadContacts(container, jobKey) {
             data.contacts.forEach(function(c) {
                 var tr = document.createElement('tr');
                 tr.innerHTML =
-                    '<td>' + (c.name || '') + '</td>' +
-                    '<td>' + (c.email ? '<a href="mailto:' + c.email + '">' + c.email + '</a>' : '') + '</td>' +
-                    '<td>' + (c.role || '') + '</td>' +
-                    '<td><button class="btn btn-sm btn-outline-danger delete-contact" data-cid="' + c.id + '" data-job-key="' + jobKey + '">X</button></td>';
+                    '<td>' + escapeHtml(c.name || '') + '</td>' +
+                    '<td>' + (c.email ? '<a href="mailto:' + escapeHtml(c.email) + '">' + escapeHtml(c.email) + '</a>' : '') + '</td>' +
+                    '<td>' + escapeHtml(c.role || '') + '</td>' +
+                    '<td><button class="btn btn-sm btn-outline-danger delete-contact" data-cid="' + c.id + '" data-job-key="' + escapeHtml(jobKey) + '">X</button></td>';
                 tbody.appendChild(tr);
             });
             // Attach delete handlers
