@@ -858,6 +858,7 @@ def update_user_settings(user_id, **kwargs):
     fields = {k: v for k, v in kwargs.items() if k in allowed}
     if not fields:
         return
+    assert all(k in allowed for k in fields), f"Disallowed field(s) in SQL: {set(fields) - allowed}"
     set_clause = ", ".join(f"{k} = ?" for k in fields)
     values = list(fields.values()) + [user_id]
     conn.execute(f"UPDATE users SET {set_clause} WHERE id = ?", values)
@@ -1392,6 +1393,7 @@ def update_job_contact(contact_id, user_id, **kwargs):
     if not fields:
         _safe_close(conn)
         return
+    assert all(k in allowed for k in fields), f"Disallowed field(s) in SQL: {set(fields) - allowed}"
     set_clause = ", ".join(f"{k} = ?" for k in fields)
     values = list(fields.values()) + [contact_id, user_id]
     conn.execute(f"UPDATE job_contacts SET {set_clause} WHERE id = ? AND user_id = ?", values)

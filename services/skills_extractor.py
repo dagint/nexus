@@ -95,7 +95,7 @@ Resume:
     if not response_text:
         raise RuntimeError("Claude API unavailable")
     # Extract JSON from response
-    json_match = re.search(r"\{[\s\S]*\}", response_text)
+    json_match = re.search(r"\{[\s\S]*?\}", response_text)
     if json_match:
         result = json.loads(json_match.group())
         logger.info("Claude extracted %d skills, seniority: %s",

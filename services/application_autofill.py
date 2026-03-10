@@ -148,7 +148,7 @@ Return ONLY valid JSON, no preamble."""
     response = call(prompt, max_tokens=500, endpoint="autofill_extract")
     if response:
         try:
-            json_match = re.search(r"\{[\s\S]*\}", response)
+            json_match = re.search(r"\{[\s\S]*?\}", response)
             if json_match:
                 return json.loads(json_match.group())
         except (json.JSONDecodeError, ValueError) as e:

@@ -46,11 +46,9 @@ class SerpApiProvider(JobAPIProvider):
         if chips_parts:
             params["chips"] = ",".join(chips_parts)
 
-        # Pagination — SerpApi uses next_page_token, but for simplicity
-        # we skip pagination beyond page 1 (API returns ~10 results per page)
-        # A next_page_token approach would require caching tokens from prior pages.
+        # Pagination — SerpApi uses a "start" offset (0-indexed, 10 results per page)
         if page > 1:
-            return []
+            params["start"] = (page - 1) * 10
 
         resp = requests.get(
             "https://serpapi.com/search",
