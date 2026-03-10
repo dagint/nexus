@@ -17,8 +17,18 @@ scheduler = BackgroundScheduler()
 MAX_EMAILS_PER_USER_PER_DAY = 2
 
 
+def shutdown_scheduler():
+    """Gracefully shut down the scheduler if running."""
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
+        logger.info("Scheduler shut down")
+
+
 def init_scheduler(app):
     """Initialize the background scheduler for notification checks."""
+    import atexit
+    atexit.register(shutdown_scheduler)
+
     scheduler.add_job(
         func=lambda: _check_alerts(app),
         trigger="interval",
