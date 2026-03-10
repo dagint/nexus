@@ -42,15 +42,7 @@ app.config.from_object(Config)
 from database import close_db
 app.teardown_appcontext(close_db)
 
-RESULTS_PER_PAGE = 20
-
-
-def _safe_int(value, default=0):
-    """Safely convert a value to int, returning default on failure."""
-    try:
-        return int(value)
-    except (ValueError, TypeError):
-        return default
+from services.constants import safe_int as _safe_int
 
 # Security
 csrf = CSRFProtect(app)

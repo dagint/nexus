@@ -56,7 +56,7 @@ def compare_jobs_view():
 @login_required
 def kanban():
     applied = get_applied_jobs(current_user.id)
-    kanban_stages = ["saved", "applied", "screen", "interview", "offer", "rejected", "withdrawn"]
+    kanban_stages = PIPELINE_STAGES
     today = datetime.now().strftime("%Y-%m-%d")
 
     # Group jobs by stage

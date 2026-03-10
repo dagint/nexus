@@ -12,15 +12,9 @@ from database import (
     get_user_oauth_accounts,
 )
 
+from services.constants import safe_int as _safe_int
+
 settings_bp = Blueprint("settings", __name__)
-
-
-def _safe_int(value, default=0):
-    """Safely convert a value to int, returning default on failure."""
-    try:
-        return int(value)
-    except (ValueError, TypeError):
-        return default
 
 
 @settings_bp.route("/settings", methods=["GET"])

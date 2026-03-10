@@ -31,3 +31,13 @@ JOB_TITLE_STOP_WORDS = STOP_WORDS | {
 
 # Pipeline / Kanban stage names
 PIPELINE_STAGES = ["saved", "applied", "screen", "interview", "offer", "rejected", "withdrawn"]
+
+RESULTS_PER_PAGE = 20
+
+
+def safe_int(value, default=0):
+    """Safely convert a value to int, returning default on failure."""
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default

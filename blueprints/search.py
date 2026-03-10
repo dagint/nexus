@@ -17,9 +17,9 @@ from database import (
     get_role_velocities_batch,
 )
 
-logger = logging.getLogger(__name__)
+from services.constants import RESULTS_PER_PAGE, safe_int as _safe_int
 
-RESULTS_PER_PAGE = 20
+logger = logging.getLogger(__name__)
 
 search_bp = Blueprint("search", __name__)
 
@@ -27,14 +27,6 @@ search_bp = Blueprint("search", __name__)
 def init_search_limiter(limiter):
     """Apply rate limits to search routes. Called during blueprint registration."""
     limiter.limit("5 per minute")(search)
-
-
-def _safe_int(value, default=0):
-    """Safely convert a value to int, returning default on failure."""
-    try:
-        return int(value)
-    except (ValueError, TypeError):
-        return default
 
 
 @search_bp.route("/search", methods=["GET", "POST"])
