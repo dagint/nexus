@@ -17,3 +17,4 @@ venv/
 *.pem
 *.key
 *_rsa
+.claude/
