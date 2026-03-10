@@ -1,15 +1,21 @@
 """Webhook notification sender for Nexus."""
+import atexit
 import hashlib
 import hmac
 import json
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
 from database import get_active_webhooks, update_webhook_triggered
 
 logger = logging.getLogger(__name__)
+
+# Thread pool for webhook delivery; limits concurrency and supports clean shutdown.
+_webhook_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="webhook")
+atexit.register(_webhook_pool.shutdown, wait=False)
 
 
 def send_webhook(url, event_type, payload, secret=None):
@@ -70,8 +76,7 @@ def trigger_webhooks(user_id, event_type, payload):
                 except Exception:
                     pass
 
-        t = threading.Thread(target=_send, daemon=True)
-        t.start()
+        _webhook_pool.submit(_send)
 
 
 def send_test_webhook(url, secret=None):

@@ -6,7 +6,11 @@ logger = logging.getLogger(__name__)
 
 
 def parse_resume(file=None, text=None):
-    """Parse resume from file upload or pasted text. Returns extracted text."""
+    """Parse resume from file upload or pasted text. Returns extracted text.
+
+    Note: File size is enforced at the framework level via Flask's
+    MAX_CONTENT_LENGTH setting in config.py (currently 5 MB).
+    """
     if text and text.strip():
         logger.info("Parsing resume from pasted text (%d chars)", len(text))
         return text.strip()
