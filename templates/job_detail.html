@@ -129,6 +129,77 @@
                 </div>
                 {% endif %}
 
+                <!-- Company Intel (AI Research) -->
+                {% if current_user.is_authenticated %}
+                <div class="card mb-3" id="companyIntelPanel">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">Company Intel</h6>
+                        <button class="btn btn-sm btn-outline-primary" id="generateResearchBtn" data-company="{{ job.company }}">
+                            Generate Research
+                        </button>
+                    </div>
+                    <div class="card-body" id="companyIntelContent">
+                        {% if company_summary %}
+                        <div>
+                            {% if company_summary.summary %}
+                            <p>{{ company_summary.summary }}</p>
+                            {% endif %}
+                            {% if company_summary.tech_stack %}
+                            <div class="mb-2">
+                                <strong>Tech Stack:</strong>
+                                {% for tech in company_summary.tech_stack %}
+                                <span class="badge bg-info text-dark">{{ tech }}</span>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                            {% if company_summary.culture %}
+                            <div class="mb-2"><strong>Culture:</strong> {{ company_summary.culture }}</div>
+                            {% endif %}
+                            {% if company_summary.growth_stage %}
+                            <div class="mb-2"><strong>Stage:</strong> <span class="badge bg-secondary">{{ company_summary.growth_stage | title }}</span></div>
+                            {% endif %}
+                            {% if company_summary.pros %}
+                            <div class="mb-2">
+                                <strong>Pros:</strong>
+                                <ul class="mb-1">
+                                {% for pro in company_summary.pros %}
+                                    <li class="text-success">{{ pro }}</li>
+                                {% endfor %}
+                                </ul>
+                            </div>
+                            {% endif %}
+                            {% if company_summary.cons %}
+                            <div class="mb-2">
+                                <strong>Cons:</strong>
+                                <ul class="mb-1">
+                                {% for con in company_summary.cons %}
+                                    <li class="text-danger">{{ con }}</li>
+                                {% endfor %}
+                                </ul>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <p class="text-muted mb-0">Click "Generate Research" to get AI-powered company insights.</p>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Alternate sources -->
+                {% if job.alternate_sources %}
+                <div class="mb-3">
+                    <strong>Also found on:</strong>
+                    {% for alt in job.alternate_sources %}
+                    {% if alt.apply_url %}
+                    <a href="{{ alt.apply_url }}" target="_blank" rel="noopener" class="badge bg-light text-dark border text-decoration-none">{{ alt.source }}</a>
+                    {% elif alt.source %}
+                    <span class="badge bg-light text-dark border">{{ alt.source }}</span>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+
                 <!-- Full description -->
                 <div class="mb-3">
                     <div class="d-flex justify-content-between align-items-center">
@@ -194,6 +265,12 @@
                             data-title="{{ job.title }}" data-company="{{ job.company }}"
                             data-description="{{ job.description[:2000] | e }}">
                         Tailor Resume
+                    </button>
+
+                    <button class="btn btn-outline-success elevator-pitch-btn"
+                            data-title="{{ job.title }}" data-company="{{ job.company }}"
+                            data-description="{{ job.description[:2000] | e }}">
+                        Why I'm a Fit
                     </button>
 
                     <button class="btn btn-outline-primary screening-btn"
@@ -367,6 +444,70 @@ if (copyTailor) {
         navigator.clipboard.writeText(content).then(function() {
             copyTailor.textContent = 'Copied!';
             setTimeout(function() { copyTailor.textContent = 'Copy All'; }, 2000);
+        });
+    });
+}
+
+// Company Research
+var researchBtn = document.getElementById('generateResearchBtn');
+if (researchBtn) {
+    researchBtn.addEventListener('click', function() {
+        var company = this.dataset.company;
+        var contentDiv = document.getElementById('companyIntelContent');
+        var originalText = this.textContent;
+
+        this.disabled = true;
+        this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Researching...';
+
+        csrfFetch('/jobs/company-research', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({company: company})
+        })
+        .then(function(resp) { return resp.json().then(function(data) { return {ok: resp.ok, data: data}; }); })
+        .then(function(result) {
+            researchBtn.disabled = false;
+            researchBtn.textContent = 'Refresh';
+
+            if (!result.ok) {
+                contentDiv.innerHTML = '<div class="alert alert-warning">' + (result.data.error || 'Failed to generate research.') + '</div>';
+                return;
+            }
+
+            var d = result.data;
+            var html = '';
+
+            if (d.summary) html += '<p>' + d.summary + '</p>';
+
+            if (d.tech_stack && d.tech_stack.length) {
+                html += '<div class="mb-2"><strong>Tech Stack:</strong> ';
+                d.tech_stack.forEach(function(t) { html += '<span class="badge bg-info text-dark me-1">' + t + '</span>'; });
+                html += '</div>';
+            }
+
+            if (d.culture) html += '<div class="mb-2"><strong>Culture:</strong> ' + d.culture + '</div>';
+            if (d.growth_stage) html += '<div class="mb-2"><strong>Stage:</strong> <span class="badge bg-secondary">' + d.growth_stage + '</span></div>';
+
+            if (d.pros && d.pros.length) {
+                html += '<div class="mb-2"><strong>Pros:</strong><ul class="mb-1">';
+                d.pros.forEach(function(p) { html += '<li class="text-success">' + p + '</li>'; });
+                html += '</ul></div>';
+            }
+
+            if (d.cons && d.cons.length) {
+                html += '<div class="mb-2"><strong>Cons:</strong><ul class="mb-1">';
+                d.cons.forEach(function(c) { html += '<li class="text-danger">' + c + '</li>'; });
+                html += '</ul></div>';
+            }
+
+            if (!html) html = '<p class="text-muted">No detailed research available for this company.</p>';
+
+            contentDiv.innerHTML = html;
+        })
+        .catch(function(err) {
+            researchBtn.disabled = false;
+            researchBtn.textContent = originalText;
+            contentDiv.innerHTML = '<div class="alert alert-danger">Error: ' + err.message + '</div>';
         });
     });
 }

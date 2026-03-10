@@ -30,6 +30,14 @@
                         <a href="{{ url_for('change_password') }}" class="btn btn-outline-secondary btn-sm">Change Password</a>
                     </div>
 
+                    <div class="form-check mb-3">
+                        <input type="checkbox" class="form-check-input" id="weekly_report" name="weekly_report_enabled" value="1"
+                               {{ 'checked' if settings.get('weekly_report_enabled', 1) }}>
+                        <label class="form-check-label" for="weekly_report">
+                            Receive weekly progress reports (Monday 9 AM)
+                        </label>
+                    </div>
+
                     <hr>
 
                     <div class="mb-3">
@@ -155,6 +163,102 @@
             <div class="card-body">
                 <a href="{{ url_for('webhooks_settings') }}" class="btn btn-outline-primary btn-sm me-2">Manage Webhooks</a>
                 <a href="{{ url_for('teams_list') }}" class="btn btn-outline-primary btn-sm">Manage Teams</a>
+            </div>
+        </div>
+
+        <!-- API Tokens -->
+        <div class="card mt-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">API Tokens</h5>
+                <form method="POST" action="{{ url_for('create_api_token_route') }}" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-sm btn-outline-success">Generate Token</button>
+                </form>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">API tokens can be used to authenticate with the REST API and browser extension auto-detect feature.</p>
+                {% if new_token %}
+                <div class="alert alert-success">
+                    <strong>New token created!</strong> Copy it now; it won't be shown again:<br>
+                    <code class="user-select-all">{{ new_token }}</code>
+                </div>
+                {% endif %}
+                {% if api_tokens %}
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Created</th>
+                            <th>Last Used</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for token in api_tokens %}
+                        <tr>
+                            <td>{{ token.name }}</td>
+                            <td><small>{{ token.created_at[:10] }}</small></td>
+                            <td><small>{{ token.last_used_at[:10] if token.last_used_at else 'Never' }}</small></td>
+                            <td>
+                                <form method="POST" action="{{ url_for('delete_api_token_route', tid=token.id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"
+                                            onclick="return confirm('Revoke this token?')">Revoke</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-muted small mb-0">No API tokens yet.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- OAuth Accounts -->
+        {% if google_oauth_available %}
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">Connected Accounts</h5>
+            </div>
+            <div class="card-body">
+                {% if oauth_accounts %}
+                <ul class="list-group list-group-flush mb-2">
+                    {% for oa in oauth_accounts %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>{{ oa.provider|title }}: {{ oa.email or oa.provider_user_id }}</span>
+                        <span class="badge bg-success">Linked</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted small">No connected accounts.</p>
+                <a href="{{ url_for('google_login') }}" class="btn btn-outline-dark btn-sm">Link Google Account</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Data Export -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">Data Export</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">Download all your Nexus data as a ZIP file containing CSV exports and settings.</p>
+                <a href="{{ url_for('export_full') }}" class="btn btn-outline-primary btn-sm">Export All Data</a>
+            </div>
+        </div>
+
+        <!-- API Documentation Link -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">REST API</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">Access your job search data programmatically via the API.</p>
+                <a href="{{ url_for('api_docs') }}" class="btn btn-outline-primary btn-sm">View API Documentation</a>
             </div>
         </div>
 

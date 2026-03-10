@@ -14,9 +14,14 @@ STAFFING_PATTERNS = [
 
 
 def deduplicate_cross_source(jobs, threshold=0.85):
-    """Remove duplicates across sources, keeping the listing with the most complete description."""
+    """Remove duplicates across sources, keeping the listing with the most complete description.
+
+    When duplicates are found, the canonical (kept) job gets an 'alternate_sources' list
+    tracking where else the job was found.
+    """
     seen = []
     result = []
+    merge_records = []  # List of (canonical_key, source_key, source_name, source_url)
 
     for job in jobs:
         title = job["title"].lower().strip()
@@ -28,10 +33,40 @@ def deduplicate_cross_source(jobs, threshold=0.85):
             company_sim = SequenceMatcher(None, company, s_company).ratio()
 
             if title_sim >= threshold and company_sim >= threshold:
-                # Keep the one with more information
+                # Track alternate source
+                if "alternate_sources" not in result[i]:
+                    result[i]["alternate_sources"] = []
+
                 if len(job.get("description", "")) > len(result[i].get("description", "")):
+                    # The new job has more info; the old canonical becomes an alternate
+                    old_canonical = result[i]
+                    result[i]["alternate_sources"].append({
+                        "source": old_canonical.get("source", ""),
+                        "apply_url": old_canonical.get("apply_url", ""),
+                    })
+                    # Record merge: new canonical absorbs old
+                    merge_records.append((
+                        job.get("job_key", ""),
+                        old_canonical.get("job_key", ""),
+                        old_canonical.get("source", ""),
+                        old_canonical.get("apply_url", ""),
+                    ))
+                    # Transfer alternate sources to new canonical
+                    job["alternate_sources"] = result[i]["alternate_sources"]
                     result[i] = job
                     seen[i] = (title, company)
+                else:
+                    # Keep existing canonical, add new job as alternate
+                    result[i]["alternate_sources"].append({
+                        "source": job.get("source", ""),
+                        "apply_url": job.get("apply_url", ""),
+                    })
+                    merge_records.append((
+                        result[i].get("job_key", ""),
+                        job.get("job_key", ""),
+                        job.get("source", ""),
+                        job.get("apply_url", ""),
+                    ))
                 is_dup = True
                 break
 
@@ -42,6 +77,15 @@ def deduplicate_cross_source(jobs, threshold=0.85):
     removed = len(jobs) - len(result)
     if removed:
         logger.info("Deduplication removed %d duplicate listings", removed)
+
+    # Persist merge records to database (best effort)
+    if merge_records:
+        try:
+            from database import record_merges_batch
+            record_merges_batch(merge_records)
+        except Exception as e:
+            logger.warning("Failed to record merge provenance: %s", e)
+
     return result
 
 

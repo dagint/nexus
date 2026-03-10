@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Import from Email - Nexus{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <h2 class="mb-4">Import from Recruiter Email</h2>
+        <p class="text-muted">Paste a recruiter email below to automatically extract job details and contact information.</p>
+
+        {% if not parsed %}
+        <!-- Step 1: Paste email -->
+        <form method="POST" action="{{ url_for('import_email') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="step" value="parse">
+
+            <div class="mb-3">
+                <label for="email_text" class="form-label">Email Content</label>
+                <textarea class="form-control" id="email_text" name="email_text" rows="12"
+                          placeholder="Paste the recruiter email here...&#10;&#10;Include the full email with signature for best results."
+                          required>{{ email_text or '' }}</textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Extract Information</button>
+            <a href="{{ url_for('pipeline') }}" class="btn btn-outline-secondary ms-2">Cancel</a>
+        </form>
+        {% else %}
+        <!-- Step 2: Review and confirm -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Extracted Information</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('import_email') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="step" value="confirm">
+                    <input type="hidden" name="email_text" value="{{ email_text or '' }}">
+
+                    <h6>Job Details</h6>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="job_title" class="form-label">Job Title</label>
+                            <input type="text" class="form-control" id="job_title" name="job_title"
+                                   value="{{ parsed.job_title }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="company" class="form-label">Company</label>
+                            <input type="text" class="form-control" id="company" name="company"
+                                   value="{{ parsed.company }}" required>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="location" class="form-label">Location</label>
+                            <input type="text" class="form-control" id="location" name="location"
+                                   value="{{ parsed.location }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="stage" class="form-label">Pipeline Stage</label>
+                            <select class="form-select" id="stage" name="stage">
+                                {% for s in stages %}
+                                <option value="{{ s }}" {{ 'selected' if s == 'applied' }}>{{ s|title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <hr>
+                    <h6>Recruiter Contact</h6>
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="recruiter_name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="recruiter_name" name="recruiter_name"
+                                   value="{{ parsed.recruiter_name }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="recruiter_email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="recruiter_email" name="recruiter_email"
+                                   value="{{ parsed.recruiter_email }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="recruiter_phone" class="form-label">Phone</label>
+                            <input type="text" class="form-control" id="recruiter_phone" name="recruiter_phone"
+                                   value="{{ parsed.recruiter_phone }}">
+                        </div>
+                    </div>
+
+                    {% if parsed.next_steps %}
+                    <div class="mb-3">
+                        <label for="next_steps" class="form-label">Next Steps</label>
+                        <input type="text" class="form-control" id="next_steps" name="next_steps"
+                               value="{{ parsed.next_steps }}">
+                    </div>
+                    {% endif %}
+
+                    {% if parsed.deadline %}
+                    <div class="mb-3">
+                        <label for="deadline" class="form-label">Deadline</label>
+                        <input type="text" class="form-control" id="deadline" name="deadline"
+                               value="{{ parsed.deadline }}">
+                    </div>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">Notes</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="3"
+                                  placeholder="Any additional notes...">{% if parsed.next_steps %}Next steps: {{ parsed.next_steps }}{% endif %}{% if parsed.deadline %}
+Deadline: {{ parsed.deadline }}{% endif %}</textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Import to Pipeline</button>
+                    <a href="{{ url_for('import_email') }}" class="btn btn-outline-secondary ms-2">Start Over</a>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

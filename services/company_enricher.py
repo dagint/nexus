@@ -120,3 +120,118 @@ def _scrape_company_data(company_name):
     if data["size"] or data["description"] or data["glassdoor_rating"]:
         return data
     return None
+
+
+def generate_company_summary(company_name, existing_data=None):
+    """Generate an AI-synthesized company research summary.
+
+    Returns a dict with culture, tech_stack, growth_stage, pros, cons, summary.
+    Falls back to heuristic if AI is unavailable.
+    """
+    from services.ai_client import call, is_available
+
+    base_info = ""
+    if existing_data:
+        if existing_data.get("description"):
+            base_info += f"Known info: {existing_data['description']}\n"
+        if existing_data.get("size"):
+            base_info += f"Size: {existing_data['size']}\n"
+        if existing_data.get("industry"):
+            base_info += f"Industry: {existing_data['industry']}\n"
+        if existing_data.get("glassdoor_rating"):
+            base_info += f"Glassdoor rating: {existing_data['glassdoor_rating']}\n"
+
+    if is_available():
+        result = _ai_company_summary(company_name, base_info)
+        if result:
+            return result
+
+    # Heuristic fallback
+    return _heuristic_company_summary(company_name, existing_data)
+
+
+def _ai_company_summary(company_name, base_info=""):
+    """Use AI to generate a company research summary."""
+    from services.ai_client import call
+
+    prompt = f"""Research summary for the company "{company_name}".
+{base_info}
+
+Provide a structured analysis in the following JSON format (respond ONLY with valid JSON):
+{{
+    "summary": "2-3 sentence overview of the company",
+    "culture": "Brief description of company culture and values",
+    "tech_stack": ["technology1", "technology2", "technology3"],
+    "growth_stage": "startup / growth / mature / enterprise",
+    "pros": ["pro1", "pro2", "pro3"],
+    "cons": ["con1", "con2"]
+}}
+
+If you don't have specific information about the company, provide reasonable inferences based on the company name and any available data. Keep each field concise."""
+
+    import json
+    response = call(prompt, max_tokens=600, endpoint="company_research")
+    if not response:
+        return None
+
+    try:
+        # Try to extract JSON from the response
+        response = response.strip()
+        if response.startswith("```"):
+            lines = response.split("\n")
+            response = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+        data = json.loads(response)
+        # Ensure all expected fields exist
+        return {
+            "summary": data.get("summary", ""),
+            "culture": data.get("culture", ""),
+            "tech_stack": data.get("tech_stack", []),
+            "growth_stage": data.get("growth_stage", ""),
+            "pros": data.get("pros", []),
+            "cons": data.get("cons", []),
+        }
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("Failed to parse AI company summary for %s", company_name)
+        return None
+
+
+def _heuristic_company_summary(company_name, existing_data=None):
+    """Build a basic company summary from available data."""
+    summary = {
+        "summary": f"{company_name} is a company in the market.",
+        "culture": "",
+        "tech_stack": [],
+        "growth_stage": "",
+        "pros": [],
+        "cons": [],
+    }
+
+    if existing_data:
+        if existing_data.get("description"):
+            summary["summary"] = existing_data["description"]
+        if existing_data.get("size"):
+            size_str = existing_data["size"].lower()
+            if any(x in size_str for x in ["10,000", "50,000", "100,000"]):
+                summary["growth_stage"] = "enterprise"
+            elif any(x in size_str for x in ["1,000", "5,000"]):
+                summary["growth_stage"] = "mature"
+            elif any(x in size_str for x in ["100", "500"]):
+                summary["growth_stage"] = "growth"
+            else:
+                summary["growth_stage"] = "startup"
+            summary["pros"].append(f"Company size: {existing_data['size']}")
+        if existing_data.get("glassdoor_rating"):
+            try:
+                rating = float(existing_data["glassdoor_rating"])
+                if rating >= 4.0:
+                    summary["pros"].append(f"Strong employee rating ({rating}/5)")
+                elif rating >= 3.0:
+                    summary["culture"] = f"Average employee satisfaction ({rating}/5)"
+                else:
+                    summary["cons"].append(f"Low employee rating ({rating}/5)")
+            except (ValueError, TypeError):
+                pass
+        if existing_data.get("industry"):
+            summary["culture"] = f"Operates in the {existing_data['industry']} industry"
+
+    return summary
