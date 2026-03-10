@@ -1767,7 +1767,10 @@ def salary_insights():
 @csrf.exempt
 @limiter.exempt
 def prometheus_metrics():
-    """Prometheus-compatible metrics endpoint."""
+    """Prometheus-compatible metrics endpoint. Protected by METRICS_SECRET if set."""
+    metrics_secret = os.environ.get("METRICS_SECRET")
+    if metrics_secret and request.headers.get("X-Metrics-Token") != metrics_secret:
+        return "", 404
     from services.metrics import render_metrics
     return Response(render_metrics(), mimetype="text/plain; version=0.0.4; charset=utf-8")
 

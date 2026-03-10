@@ -8,6 +8,13 @@ services:
     volumes:
       - job_data:/app/data/db
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
 
 volumes:
   job_data:

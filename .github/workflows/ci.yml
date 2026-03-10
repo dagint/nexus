@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 env:
   DOCKER_IMAGE: dagint/nexus
 
@@ -17,10 +20,10 @@ jobs:
         python-version: ["3.11", "3.12", "3.13"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -48,14 +51,14 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ${{ env.DOCKER_IMAGE }}
           tags: |
@@ -64,7 +67,7 @@ jobs:
             type=ref,event=pr
 
       - name: Build image for scanning
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           load: true
@@ -80,7 +83,7 @@ jobs:
           docker stop test-app
 
       - name: Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@0.30.0
+        uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9724c8a5e33bc2d97a5 # 0.30.0
         continue-on-error: true
         with:
           image-ref: ${{ env.DOCKER_IMAGE }}:scan
@@ -89,7 +92,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Trivy SARIF scan
-        uses: aquasecurity/trivy-action@0.30.0
+        uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9724c8a5e33bc2d97a5 # 0.30.0
         continue-on-error: true
         if: always()
         with:
@@ -99,21 +102,21 @@ jobs:
           severity: CRITICAL,HIGH,MEDIUM
 
       - name: Upload Trivy SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@820e3160e279568db735cee8ed8f8e77a6da7818 # v3
         if: always() && hashFiles('trivy-results.sarif') != ''
         with:
           sarif_file: trivy-results.sarif
 
       - name: Log in to Docker Hub
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Push to Docker Hub
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           push: true

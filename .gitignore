@@ -1,4 +1,6 @@
 .env
+.env.local
+.env.*.local
 __pycache__/
 *.pyc
 *.pyo
@@ -12,3 +14,6 @@ dist/
 build/
 .venv/
 venv/
+*.pem
+*.key
+*_rsa
