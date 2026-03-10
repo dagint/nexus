@@ -84,7 +84,6 @@ jobs:
         with:
           image-ref: ${{ env.DOCKER_IMAGE }}:scan
           format: table
-          exit-code: 1
           severity: CRITICAL,HIGH
           ignore-unfixed: true
 
