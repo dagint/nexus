@@ -22,7 +22,7 @@ from database import (
     mark_applied, unmark_applied, get_applied_job_keys, get_applied_jobs,
     get_applied_stats, update_applied_stage, update_applied_notes, PIPELINE_STAGES,
     get_user_settings, update_user_settings,
-    save_resume, get_resumes, get_resume, get_default_resume,
+    save_resume, get_resumes, get_resume,
     set_default_resume, delete_resume, update_resume,
     add_search_history, get_search_history,
     bookmark_job, unbookmark_job, get_bookmarked_jobs, get_bookmarked_job_keys,
@@ -454,12 +454,12 @@ def search():
 
         # Use saved resume for GET re-searches
         if current_user.is_authenticated and not resume_data:
-            default = get_default_resume(current_user.id)
-            if default:
-                resume_text = default["raw_text"]
-                resume_id = default["id"]
-                if default.get("skills_json"):
-                    resume_data = json.loads(default["skills_json"])
+            from services.resume_loader import load_resume_or_empty
+            loaded = load_resume_or_empty(current_user.id)
+            if loaded["text"]:
+                resume_text = loaded["text"]
+                resume_id = loaded["id"]
+                resume_data = loaded["data"]
 
     # Extract skills if not already loaded from cache
     if resume_text and not resume_data:
@@ -950,13 +950,13 @@ def generate_cover_letter_route():
     company = data.get("company", "")
     job_description = data.get("description", "")
 
-    # Get user's default resume
-    default = get_default_resume(current_user.id)
-    if not default:
-        return jsonify({"error": "No resume saved. Upload a resume first."}), 400
+    from services.resume_loader import require_resume
+    resume, err = require_resume(current_user.id)
+    if err:
+        return err
 
     letter = generate_cover_letter(
-        default["raw_text"], job_title, company, job_description,
+        resume["text"], job_title, company, job_description,
         user_name=current_user.name
     )
 
@@ -981,11 +981,11 @@ def screening_answers():
     if not questions:
         return jsonify({"error": "No questions provided."}), 400
 
-    default = get_default_resume(current_user.id)
-    resume_text = default["raw_text"] if default else ""
+    from services.resume_loader import load_resume_or_empty
+    resume = load_resume_or_empty(current_user.id)
 
     answers = generate_screening_answers(
-        resume_text, job_title, company, job_description, questions,
+        resume["text"], job_title, company, job_description, questions,
         user_name=current_user.name
     )
 
@@ -1006,17 +1006,13 @@ def application_draft():
     company = data.get("company", "")
     job_description = data.get("description", "")
 
-    default = get_default_resume(current_user.id)
-    if not default:
-        return jsonify({"error": "No resume saved. Upload a resume first."}), 400
-
-    resume_text = default["raw_text"]
-    resume_data = {}
-    if default.get("skills_json"):
-        resume_data = json.loads(default["skills_json"])
+    from services.resume_loader import require_resume
+    resume, err = require_resume(current_user.id)
+    if err:
+        return err
 
     draft = generate_application_draft(
-        resume_text, resume_data, job_title, company, job_description,
+        resume["text"], resume["data"], job_title, company, job_description,
         user_name=current_user.name
     )
 
@@ -1400,12 +1396,13 @@ def interview_prep():
     if cached:
         return jsonify(cached["prep"])
 
-    default = get_default_resume(current_user.id)
-    if not default:
-        return jsonify({"error": "No resume saved. Upload a resume first."}), 400
+    from services.resume_loader import require_resume
+    resume, err = require_resume(current_user.id)
+    if err:
+        return err
 
     result = generate_interview_prep(
-        default["raw_text"],
+        resume["text"],
         job_title,
         company,
         job_description,
@@ -1703,11 +1700,12 @@ def tailor_resume_route():
     company = data.get("company", "")
     job_description = data.get("description", "")
 
-    default = get_default_resume(current_user.id)
-    if not default:
-        return jsonify({"error": "No resume saved. Upload a resume first."}), 400
+    from services.resume_loader import require_resume
+    resume, err = require_resume(current_user.id)
+    if err:
+        return err
 
-    result = tailor_resume(default["raw_text"], job_title, company, job_description)
+    result = tailor_resume(resume["text"], job_title, company, job_description)
 
     # Track AI call
     try:
@@ -1736,11 +1734,12 @@ def autofill_data():
 
     # Generate fresh data
     from services.application_autofill import generate_autofill
-    default = get_default_resume(current_user.id)
-    if not default:
-        return jsonify({"error": "No resume saved. Upload a resume first."}), 400
+    from services.resume_loader import require_resume
+    resume, err = require_resume(current_user.id)
+    if err:
+        return err
 
-    result = generate_autofill(default["raw_text"], user_settings)
+    result = generate_autofill(resume["text"], user_settings)
 
     # Cache the result
     update_user_settings(current_user.id, user_autofill_data=json.dumps(result))
@@ -1899,11 +1898,11 @@ def linkedin_note():
     company = data.get("company", "")
     recruiter_name = data.get("recruiter_name", "")
 
-    default = get_default_resume(current_user.id)
-    resume_text = default["raw_text"] if default else ""
+    from services.resume_loader import load_resume_or_empty
+    resume = load_resume_or_empty(current_user.id)
 
-    note = generate_linkedin_note(resume_text, job_title, company, user_id=current_user.id)
-    message = generate_linkedin_message(resume_text, job_title, company,
+    note = generate_linkedin_note(resume["text"], job_title, company, user_id=current_user.id)
+    message = generate_linkedin_message(resume["text"], job_title, company,
                                          recruiter_name=recruiter_name or None,
                                          user_id=current_user.id)
     search_urls = get_linkedin_search_url(job_title, company)
@@ -1928,10 +1927,10 @@ def networking_advice():
     company = data.get("company", "")
     job_description = data.get("description", "")
 
-    default = get_default_resume(current_user.id)
-    resume_text = default["raw_text"] if default else ""
+    from services.resume_loader import load_resume_or_empty
+    resume = load_resume_or_empty(current_user.id)
 
-    result = get_networking_suggestions(resume_text, job_title, company,
+    result = get_networking_suggestions(resume["text"], job_title, company,
                                         job_description=job_description,
                                         user_id=current_user.id)
     return jsonify(result)
@@ -2104,12 +2103,13 @@ def elevator_pitch():
     company = data.get("company", "")
     job_description = data.get("description", "")
 
-    default = get_default_resume(current_user.id)
-    if not default:
-        return jsonify({"error": "No resume saved. Upload a resume first."}), 400
+    from services.resume_loader import require_resume
+    resume, err = require_resume(current_user.id)
+    if err:
+        return err
 
     result = generate_elevator_pitch(
-        default["raw_text"], job_title, company, job_description,
+        resume["text"], job_title, company, job_description,
         user_id=current_user.id,
     )
     return jsonify(result)
