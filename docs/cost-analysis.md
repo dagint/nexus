@@ -1,8 +1,8 @@
-# Job Search Tool - Monthly Cost Analysis
+# Nexus - Monthly Cost Analysis
 
 ## Overview
 
-This document breaks down the per-user monthly costs for running the Job Search Tool, covering all API services, hosting, and email. Costs are estimated based on typical usage patterns.
+This document breaks down the per-user monthly costs for running the Nexus, covering all API services, hosting, and email. Costs are estimated based on typical usage patterns.
 
 ## Usage Assumptions
 

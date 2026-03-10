@@ -133,7 +133,7 @@ def send_password_reset_email(email, token, base_url):
     html = f"""
     <html><body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
     <h2>Password Reset Request</h2>
-    <p>You requested a password reset for your Job Search Tool account.</p>
+    <p>You requested a password reset for your Nexus account.</p>
     <p>Click the link below to reset your password. This link will expire in 1 hour.</p>
     <p><a href="{reset_url}" style="display:inline-block;padding:10px 20px;background:#0d6efd;color:white;text-decoration:none;border-radius:5px">Reset Password</a></p>
     <p>Or copy and paste this URL into your browser:</p>
@@ -144,7 +144,7 @@ def send_password_reset_email(email, token, base_url):
 
     try:
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = "Password Reset - Job Search Tool"
+        msg["Subject"] = "Password Reset - Nexus"
         msg["From"] = Config.SMTP_FROM
         msg["To"] = email
         msg.attach(MIMEText(html, "html"))
@@ -191,5 +191,5 @@ def _simple_html(jobs, search_query):
     <h2>Job Alert: {len(jobs)} new matches</h2>
     <p>Search: <strong>{escape(search_query)}</strong></p>
     <table style="width:100%;border-collapse:collapse">{rows}</table>
-    <hr><p style="color:#999;font-size:12px">Sent by Job Search Tool</p>
+    <hr><p style="color:#999;font-size:12px">Sent by Nexus</p>
     </body></html>"""

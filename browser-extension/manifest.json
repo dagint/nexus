@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Job Search Tool Helper",
+  "name": "Nexus Helper",
   "version": "1.0.0",
-  "description": "Save job listings to your Job Search Tool dashboard and get AI-powered application help.",
+  "description": "Save job listings to your Nexus dashboard and get AI-powered application help.",
   "permissions": ["activeTab", "storage"],
   "action": {
     "default_popup": "popup.html",

@@ -1,4 +1,4 @@
-// Job Search Tool - Client-side filtering and interactions
+// Nexus - Client-side filtering and interactions
 
 // CSRF-aware fetch wrapper
 function csrfFetch(url, options) {
