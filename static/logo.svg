@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f7cff"/>
+      <stop offset="100%" stop-color="#6c3bdb"/>
+    </linearGradient>
+    <linearGradient id="node" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#80b0ff"/>
+      <stop offset="100%" stop-color="#a78bfa"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+
+  <!-- Briefcase body -->
+  <rect x="96" y="200" width="320" height="200" rx="24" fill="white" opacity="0.95"/>
+
+  <!-- Briefcase handle -->
+  <path d="M192 200 V168 A32 32 0 0 1 224 136 H288 A32 32 0 0 1 320 168 V200"
+        stroke="white" stroke-width="20" fill="none" opacity="0.95" stroke-linecap="round"/>
+
+  <!-- Briefcase center clasp / divider -->
+  <rect x="236" y="270" width="40" height="60" rx="8" fill="url(#bg)" opacity="0.7"/>
+
+  <!-- Connection nodes - representing "nexus" (interconnected points) -->
+  <!-- Top center node -->
+  <circle cx="256" cy="108" r="16" fill="url(#node)"/>
+  <!-- Top left node -->
+  <circle cx="148" cy="148" r="12" fill="url(#node)" opacity="0.8"/>
+  <!-- Top right node -->
+  <circle cx="364" cy="148" r="12" fill="url(#node)" opacity="0.8"/>
+
+  <!-- Connection lines between nodes -->
+  <line x1="256" y1="108" x2="148" y2="148" stroke="url(#node)" stroke-width="4" opacity="0.6"/>
+  <line x1="256" y1="108" x2="364" y2="148" stroke="url(#node)" stroke-width="4" opacity="0.6"/>
+  <line x1="148" y1="148" x2="364" y2="148" stroke="url(#node)" stroke-width="3" opacity="0.3"/>
+
+  <!-- Small accent nodes at bottom corners -->
+  <circle cx="128" cy="368" r="8" fill="url(#node)" opacity="0.5"/>
+  <circle cx="384" cy="368" r="8" fill="url(#node)" opacity="0.5"/>
+  <line x1="128" y1="368" x2="236" y2="300" stroke="url(#node)" stroke-width="3" opacity="0.3"/>
+  <line x1="384" y1="368" x2="276" y2="300" stroke="url(#node)" stroke-width="3" opacity="0.3"/>
+</svg>
