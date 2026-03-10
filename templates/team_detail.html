@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block title %}{{ team.name }} - Team{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2 class="mb-0">{{ team.name }}</h2>
+                <small class="text-muted">{{ members|length }} member{{ 's' if members|length != 1 }}</small>
+            </div>
+            <a href="{{ url_for('teams_list') }}" class="btn btn-outline-secondary btn-sm">Back to Teams</a>
+        </div>
+
+        <!-- Shared Jobs -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Shared Jobs</h5>
+                <span class="badge bg-primary">{{ shared_jobs|length }}</span>
+            </div>
+            {% if shared_jobs %}
+            <ul class="list-group list-group-flush">
+                {% for job in shared_jobs %}
+                <li class="list-group-item">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1">
+                            <h6 class="mb-1">{{ job.title or 'Untitled' }}</h6>
+                            <p class="text-muted small mb-1">
+                                {{ job.company or '' }}
+                                {% if job.location %} &mdash; {{ job.location }}{% endif %}
+                            </p>
+                            {% if job.notes %}
+                            <p class="small mb-1">{{ job.notes }}</p>
+                            {% endif %}
+                            <small class="text-muted">
+                                Shared by {{ job.shared_by_name or job.shared_by_email }}
+                                on {{ job.created_at[:10] }}
+                            </small>
+                        </div>
+                        <div class="d-flex flex-column gap-1 flex-shrink-0">
+                            {% if job.apply_url %}
+                            <a href="{{ job.apply_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-primary">Apply</a>
+                            {% endif %}
+                            <button class="btn btn-sm btn-outline-secondary team-comment-btn"
+                                    data-job-id="{{ job.id }}" data-team-id="{{ team.id }}">
+                                Comments
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Comments section (hidden by default) -->
+                    <div class="team-comments mt-2 d-none" id="comments-{{ job.id }}">
+                        <div class="comments-list border-top pt-2 mb-2"></div>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control comment-input" placeholder="Add a comment...">
+                            <button class="btn btn-outline-primary post-comment-btn"
+                                    data-job-id="{{ job.id }}" data-team-id="{{ team.id }}">Post</button>
+                        </div>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <div class="card-body">
+                <p class="text-muted mb-0">No jobs shared yet. Share jobs from search results using the team share feature.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Activity Feed -->
+        {% if activity %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Recent Activity</h5>
+            </div>
+            <ul class="list-group list-group-flush">
+                {% for item in activity[:10] %}
+                <li class="list-group-item py-2">
+                    <small>
+                        <strong>{{ item.user_name or item.user_email }}</strong>
+                        {% if item.activity_type == 'share' %}
+                        shared <strong>{{ item.job_title or 'a job' }}</strong>
+                        {% if item.job_company %} at {{ item.job_company }}{% endif %}
+                        {% elif item.activity_type == 'comment' %}
+                        commented on <strong>{{ item.job_title or 'a job' }}</strong>
+                        {% if item.job_company %} at {{ item.job_company }}{% endif %}
+                        {% endif %}
+                        <span class="text-muted">{{ item.created_at[:16] }}</span>
+                    </small>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Sidebar: Members & Invite -->
+    <div class="col-lg-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Members</h5>
+            </div>
+            <ul class="list-group list-group-flush">
+                {% for member in members %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <span>{{ member.name or member.email }}</span>
+                        {% if member.role == 'admin' %}
+                        <span class="badge bg-primary ms-1">Admin</span>
+                        {% endif %}
+                    </div>
+                    {% if member.name %}
+                    <small class="text-muted">{{ member.email }}</small>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        {% if user_role == 'admin' %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Invite Member</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('team_invite', tid=team.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <input type="email" class="form-control" name="email"
+                               placeholder="user@example.com" required>
+                        <div class="form-text">The user must have a Nexus account.</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm">Invite</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Share a Job to Team -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Share a Job</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">Share a job by entering its details or by using the "Share to Team" button on search result cards.</p>
+                <div class="mb-2">
+                    <input type="text" class="form-control form-control-sm" id="shareJobTitle" placeholder="Job title">
+                </div>
+                <div class="mb-2">
+                    <input type="text" class="form-control form-control-sm" id="shareJobCompany" placeholder="Company">
+                </div>
+                <div class="mb-2">
+                    <input type="text" class="form-control form-control-sm" id="shareJobLocation" placeholder="Location">
+                </div>
+                <div class="mb-2">
+                    <input type="url" class="form-control form-control-sm" id="shareJobUrl" placeholder="Apply URL">
+                </div>
+                <div class="mb-2">
+                    <textarea class="form-control form-control-sm" id="shareJobNotes" rows="2" placeholder="Notes"></textarea>
+                </div>
+                <button class="btn btn-sm btn-primary" id="shareJobBtn" data-team-id="{{ team.id }}">Share Job</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    // Toggle comments
+    document.querySelectorAll(".team-comment-btn").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+            var jobId = this.dataset.jobId;
+            var teamId = this.dataset.teamId;
+            var container = document.getElementById("comments-" + jobId);
+            container.classList.toggle("d-none");
+
+            if (!container.classList.contains("d-none")) {
+                // Load comments
+                csrfFetch("/teams/" + teamId + "/jobs/" + jobId + "/comments")
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        var list = container.querySelector(".comments-list");
+                        if (!data.comments || data.comments.length === 0) {
+                            list.innerHTML = '<p class="text-muted small">No comments yet.</p>';
+                            return;
+                        }
+                        var html = "";
+                        data.comments.forEach(function(c) {
+                            html += '<div class="mb-2"><strong class="small">' +
+                                    (c.name || c.email) + '</strong> ' +
+                                    '<small class="text-muted">' + (c.created_at || '').substring(0, 16) + '</small>' +
+                                    '<p class="small mb-0">' + c.comment + '</p></div>';
+                        });
+                        list.innerHTML = html;
+                    });
+            }
+        });
+    });
+
+    // Post comment
+    document.querySelectorAll(".post-comment-btn").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+            var jobId = this.dataset.jobId;
+            var teamId = this.dataset.teamId;
+            var input = this.parentElement.querySelector(".comment-input");
+            var comment = input.value.trim();
+            if (!comment) return;
+
+            csrfFetch("/teams/" + teamId + "/jobs/" + jobId + "/comment", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ comment: comment }),
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.status === "ok") {
+                    input.value = "";
+                    // Reload comments
+                    document.querySelector('.team-comment-btn[data-job-id="' + jobId + '"]').click();
+                    document.querySelector('.team-comment-btn[data-job-id="' + jobId + '"]').click();
+                }
+            });
+        });
+    });
+
+    // Share job to team
+    var shareBtn = document.getElementById("shareJobBtn");
+    if (shareBtn) {
+        shareBtn.addEventListener("click", function() {
+            var teamId = this.dataset.teamId;
+            var title = document.getElementById("shareJobTitle").value.trim();
+            var company = document.getElementById("shareJobCompany").value.trim();
+            if (!title) { alert("Job title is required."); return; }
+
+            var jobKey = "manual_" + title.replace(/\s+/g, "_").substring(0, 50) + "_" + Date.now();
+
+            csrfFetch("/teams/" + teamId + "/share-job", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    job_key: jobKey,
+                    title: title,
+                    company: company,
+                    location: document.getElementById("shareJobLocation").value.trim(),
+                    apply_url: document.getElementById("shareJobUrl").value.trim(),
+                    notes: document.getElementById("shareJobNotes").value.trim(),
+                }),
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.status === "ok") {
+                    location.reload();
+                } else {
+                    alert(data.error || "Failed to share job.");
+                }
+            });
+        });
+    }
+});
+</script>
+{% endblock %}

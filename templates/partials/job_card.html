@@ -11,7 +11,10 @@
         <div class="d-flex justify-content-between align-items-start">
             <div class="flex-grow-1">
                 <div class="form-check form-check-inline float-start me-2">
-                    <input type="checkbox" class="form-check-input compare-check" data-job-key="{{ job.job_key }}">
+                    <input type="checkbox" class="form-check-input compare-check bulk-select-check"
+                           data-job-key="{{ job.job_key }}"
+                           data-title="{{ job.title }}" data-company="{{ job.company }}"
+                           data-location="{{ job.location or '' }}" data-apply-url="{{ job.apply_url or '' }}">
                 </div>
                 <h5 class="card-title mb-1">
                     {{ job.title }}
@@ -182,10 +185,25 @@
                         data-description="{{ job.description[:2000] | e }}">
                     Draft
                 </button>
+                <button class="btn btn-sm btn-outline-primary tailor-resume-btn d-none d-md-inline-block"
+                        data-title="{{ job.title }}" data-company="{{ job.company }}"
+                        data-description="{{ job.description[:2000] | e }}">
+                    Tailor
+                </button>
                 <button class="btn btn-sm btn-outline-secondary interview-prep-btn"
                         data-title="{{ job.title }}" data-company="{{ job.company }}"
                         data-description="{{ job.description[:2000] | e }}">
                     Prep
+                </button>
+                <button class="btn btn-sm btn-outline-info linkedin-helper-btn"
+                        data-title="{{ job.title }}" data-company="{{ job.company }}"
+                        data-description="{{ job.description[:2000] | e }}">
+                    LinkedIn
+                </button>
+                <button class="btn btn-sm btn-outline-secondary networking-btn"
+                        data-title="{{ job.title }}" data-company="{{ job.company }}"
+                        data-description="{{ job.description[:2000] | e }}">
+                    Network
                 </button>
                 {% endif %}
 

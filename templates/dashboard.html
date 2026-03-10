@@ -6,36 +6,36 @@
 <h2 class="mb-4">Dashboard</h2>
 
 <!-- Stats cards -->
-<div class="row mb-4">
-    <div class="col-md-3 mb-3">
-        <div class="card text-center">
+<div class="row mb-4 dashboard-stats">
+    <div class="col-md-3 col-6 mb-3">
+        <div class="card text-center stat-card">
             <div class="card-body">
-                <h3 class="mb-0">{{ total_applied }}</h3>
-                <small class="text-muted">Jobs Applied</small>
+                <div class="stat-number">{{ total_applied }}</div>
+                <div class="stat-label">Jobs Applied</div>
             </div>
         </div>
     </div>
-    <div class="col-md-3 mb-3">
-        <div class="card text-center">
+    <div class="col-md-3 col-6 mb-3">
+        <div class="card text-center stat-card">
             <div class="card-body">
-                <h3 class="mb-0">{{ bookmarks_count }}</h3>
-                <small class="text-muted">Bookmarked</small>
+                <div class="stat-number">{{ bookmarks_count }}</div>
+                <div class="stat-label">Bookmarked</div>
             </div>
         </div>
     </div>
-    <div class="col-md-3 mb-3">
-        <div class="card text-center">
+    <div class="col-md-3 col-6 mb-3">
+        <div class="card text-center stat-card">
             <div class="card-body">
-                <h3 class="mb-0">{{ resumes_count }}</h3>
-                <small class="text-muted">Resumes</small>
+                <div class="stat-number">{{ resumes_count }}</div>
+                <div class="stat-label">Resumes</div>
             </div>
         </div>
     </div>
-    <div class="col-md-3 mb-3">
-        <div class="card text-center">
+    <div class="col-md-3 col-6 mb-3">
+        <div class="card text-center stat-card">
             <div class="card-body">
-                <h3 class="mb-0">{{ alerts_count }}</h3>
-                <small class="text-muted">Active Alerts</small>
+                <div class="stat-number">{{ alerts_count }}</div>
+                <div class="stat-label">Active Alerts</div>
             </div>
         </div>
     </div>
@@ -71,6 +71,37 @@
             {% endif %}
             {% endfor %}
         </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Due Follow-ups -->
+{% if due_follow_ups %}
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Due Follow-ups</h5>
+        <a href="{{ url_for('pipeline') }}" class="btn btn-sm btn-outline-primary">Pipeline</a>
+    </div>
+    <div class="card-body">
+        {% for fu in due_follow_ups %}
+        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+            <div>
+                <strong>{{ fu.title }}</strong><br>
+                <small class="text-muted">{{ fu.company }}</small>
+            </div>
+            <div class="text-end">
+                {% if fu.follow_up_date < today %}
+                <span class="badge bg-danger">Overdue: {{ fu.follow_up_date }}</span>
+                {% elif fu.follow_up_date == today %}
+                <span class="badge bg-warning text-dark">Due today</span>
+                {% else %}
+                <span class="badge bg-info">{{ fu.follow_up_date }}</span>
+                {% endif %}
+                <br>
+                <small class="text-muted text-capitalize">{{ fu.stage }}</small>
+            </div>
+        </div>
+        {% endfor %}
     </div>
 </div>
 {% endif %}
@@ -128,4 +159,98 @@
         </div>
     </div>
 </div>
+
+<!-- Quick Actions -->
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0">Quick Actions</h5></div>
+            <div class="card-body d-flex flex-wrap gap-2">
+                <a href="{{ url_for('index') }}" class="btn btn-primary">Search Jobs</a>
+                <a href="{{ url_for('salary_insights') }}" class="btn btn-outline-info">Salary Insights</a>
+                <button class="btn btn-outline-secondary" id="autofillBtn">Copy Application Data</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Autofill Modal -->
+<div class="modal fade" id="autofillModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Application Auto-fill Data</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="autofillContent">
+                <div class="text-center py-3">
+                    <div class="spinner-border spinner-border-sm me-1"></div> Extracting data from resume...
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var autofillBtn = document.getElementById('autofillBtn');
+if (autofillBtn) {
+    autofillBtn.addEventListener('click', function() {
+        var modal = new bootstrap.Modal(document.getElementById('autofillModal'));
+        modal.show();
+
+        csrfFetch('/jobs/autofill-data')
+            .then(function(resp) { return resp.json(); })
+            .then(function(data) {
+                if (data.error) {
+                    document.getElementById('autofillContent').innerHTML =
+                        '<div class="alert alert-warning">' + data.error + '</div>';
+                    return;
+                }
+                var html = '';
+                var fields = [
+                    ['Name', data.name],
+                    ['Email', data.email],
+                    ['Phone', data.phone],
+                    ['Location', data.location],
+                    ['LinkedIn', data.linkedin],
+                    ['GitHub', data.github],
+                    ['Years of Experience', data.years_of_experience],
+                    ['Education', data.education],
+                    ['Current Title', data.current_title],
+                    ['Summary', data.summary],
+                ];
+                fields.forEach(function(f) {
+                    if (f[1]) {
+                        html += '<div class="d-flex justify-content-between align-items-start mb-2 pb-2 border-bottom">';
+                        html += '<div><strong class="small">' + f[0] + '</strong><br><span>' + f[1] + '</span></div>';
+                        html += '<button class="btn btn-sm btn-outline-secondary copy-field-btn flex-shrink-0 ms-2" data-value="' + f[1].replace(/"/g, '&quot;') + '">Copy</button>';
+                        html += '</div>';
+                    }
+                });
+                if (!html) html = '<p class="text-muted">No data could be extracted. Upload a resume first.</p>';
+                document.getElementById('autofillContent').innerHTML = html;
+
+                // Attach copy handlers
+                document.querySelectorAll('.copy-field-btn').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        var val = this.dataset.value;
+                        navigator.clipboard.writeText(val).then(function() {
+                            btn.textContent = 'Copied!';
+                            setTimeout(function() { btn.textContent = 'Copy'; }, 1500);
+                        });
+                    });
+                });
+            })
+            .catch(function(err) {
+                document.getElementById('autofillContent').innerHTML =
+                    '<div class="alert alert-danger">Failed to load data: ' + err.message + '</div>';
+            });
+    });
+}
+</script>
 {% endblock %}

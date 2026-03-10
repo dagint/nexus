@@ -304,6 +304,93 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS idx_prep_cache_user ON interview_prep_cache(user_id);
+
+        CREATE TABLE IF NOT EXISTS salary_data (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            role_query TEXT NOT NULL,
+            location TEXT,
+            salary_min REAL,
+            salary_max REAL,
+            source TEXT,
+            company TEXT,
+            recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_salary_data_user ON salary_data(user_id);
+        CREATE INDEX IF NOT EXISTS idx_salary_data_role ON salary_data(role_query);
+
+        CREATE TABLE IF NOT EXISTS job_description_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            job_key TEXT NOT NULL,
+            description_hash TEXT NOT NULL,
+            description TEXT NOT NULL,
+            snapshot_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_jd_snapshots_user_job ON job_description_snapshots(user_id, job_key);
+
+        CREATE TABLE IF NOT EXISTS webhooks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            url TEXT NOT NULL,
+            event_types TEXT DEFAULT '["new_matches"]',
+            is_active INTEGER DEFAULT 1,
+            secret TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_triggered_at TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_webhooks_user_id ON webhooks(user_id);
+
+        CREATE TABLE IF NOT EXISTS teams (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            created_by INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS team_members (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            team_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            role TEXT DEFAULT 'member',
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE(team_id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_team_members_user ON team_members(user_id);
+        CREATE INDEX IF NOT EXISTS idx_team_members_team ON team_members(team_id);
+
+        CREATE TABLE IF NOT EXISTS team_shared_jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            team_id INTEGER NOT NULL,
+            shared_by INTEGER NOT NULL,
+            job_key TEXT NOT NULL,
+            title TEXT,
+            company TEXT,
+            location TEXT,
+            apply_url TEXT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+            FOREIGN KEY (shared_by) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_team_shared_jobs_team ON team_shared_jobs(team_id);
+
+        CREATE TABLE IF NOT EXISTS team_job_comments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            team_shared_job_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            comment TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (team_shared_job_id) REFERENCES team_shared_jobs(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_team_job_comments_job ON team_job_comments(team_shared_job_id);
     """)
     conn.commit()
 
@@ -312,6 +399,9 @@ def init_db():
     _migrate_add_column(conn, "users", "blocked_keywords", "TEXT DEFAULT '[]'")
     _migrate_add_column(conn, "users", "blocked_locations", "TEXT DEFAULT '[]'")
     _migrate_add_column(conn, "applied_jobs", "follow_up_date", "TEXT")
+    _migrate_add_column(conn, "users", "scoring_weights", "TEXT")
+    _migrate_add_column(conn, "users", "user_autofill_data", "TEXT")
+    _migrate_add_column(conn, "users", "is_admin", "INTEGER DEFAULT 0")
 
     seed_search_templates(conn)
 
@@ -661,7 +751,7 @@ def cache_company(company_name, data):
 def get_user_settings(user_id):
     conn = get_db()
     row = conn.execute(
-        "SELECT timezone, max_commute_minutes, seniority_tier, blocked_companies, blocked_keywords, blocked_locations FROM users WHERE id = ?",
+        "SELECT timezone, max_commute_minutes, seniority_tier, blocked_companies, blocked_keywords, blocked_locations, scoring_weights, user_autofill_data FROM users WHERE id = ?",
         (user_id,),
     ).fetchone()
     _safe_close(conn)
@@ -670,7 +760,7 @@ def get_user_settings(user_id):
 
 def update_user_settings(user_id, **kwargs):
     conn = get_db()
-    allowed = {"timezone", "max_commute_minutes", "seniority_tier", "blocked_companies", "blocked_keywords", "blocked_locations", "name"}
+    allowed = {"timezone", "max_commute_minutes", "seniority_tier", "blocked_companies", "blocked_keywords", "blocked_locations", "name", "scoring_weights", "user_autofill_data"}
     fields = {k: v for k, v in kwargs.items() if k in allowed}
     if not fields:
         return
@@ -1317,3 +1407,392 @@ def get_role_velocities_batch(company_title_pairs, months=6):
         results[(company, title)] = row["count"] if row else 0
     _safe_close(conn)
     return results
+
+
+# --- Job Description Snapshots ---
+
+def snapshot_job_description(user_id, job_key, description):
+    """Save a snapshot of a job description if it changed since the last snapshot.
+
+    Returns True if a new snapshot was saved, False if unchanged.
+    """
+    desc_hash = hashlib.sha256((description or "").encode()).hexdigest()
+    conn = get_db()
+
+    # Check if we already have this exact version
+    last = conn.execute(
+        "SELECT description_hash FROM job_description_snapshots WHERE user_id = ? AND job_key = ? ORDER BY snapshot_at DESC LIMIT 1",
+        (user_id, job_key),
+    ).fetchone()
+
+    if last and last["description_hash"] == desc_hash:
+        _safe_close(conn)
+        return False
+
+    conn.execute(
+        "INSERT INTO job_description_snapshots (user_id, job_key, description_hash, description) VALUES (?, ?, ?, ?)",
+        (user_id, job_key, desc_hash, description),
+    )
+    conn.commit()
+    _safe_close(conn)
+    return True
+
+
+def get_job_description_snapshots(user_id, job_key):
+    """Return all snapshots for a job, ordered by date."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM job_description_snapshots WHERE user_id = ? AND job_key = ? ORDER BY snapshot_at ASC",
+        (user_id, job_key),
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+# --- Follow-up Reminders ---
+
+def get_due_follow_ups(days_ahead=7):
+    """Get all follow-ups due within the next N days across all users.
+
+    Returns rows with user_id, job_key, title, company, follow_up_date, stage, email.
+    """
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT aj.user_id, aj.job_key, aj.title, aj.company, aj.follow_up_date, aj.stage,
+                  u.email, u.name
+           FROM applied_jobs aj
+           JOIN users u ON u.id = aj.user_id
+           WHERE aj.follow_up_date IS NOT NULL
+             AND aj.follow_up_date <= date('now', '+' || ? || ' days')
+             AND aj.stage NOT IN ('rejected', 'withdrawn')
+           ORDER BY aj.follow_up_date ASC""",
+        (days_ahead,),
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+def get_user_due_follow_ups(user_id, days_ahead=7):
+    """Get follow-ups due for a specific user within the next N days."""
+    conn = get_db()
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    future = (datetime.utcnow() + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
+    rows = conn.execute(
+        """SELECT * FROM applied_jobs
+           WHERE user_id = ?
+             AND follow_up_date IS NOT NULL
+             AND follow_up_date <= ?
+             AND stage NOT IN ('rejected', 'withdrawn')
+           ORDER BY follow_up_date ASC""",
+        (user_id, future),
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+# --- Webhooks ---
+
+def create_webhook(user_id, url, event_types=None, secret=None):
+    conn = get_db()
+    et = json.dumps(event_types or ["new_matches"])
+    cursor = conn.execute(
+        "INSERT INTO webhooks (user_id, url, event_types, secret) VALUES (?, ?, ?, ?)",
+        (user_id, url, et, secret),
+    )
+    conn.commit()
+    wid = cursor.lastrowid
+    _safe_close(conn)
+    return wid
+
+
+def get_webhooks(user_id):
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM webhooks WHERE user_id = ? ORDER BY created_at DESC",
+        (user_id,),
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+def delete_webhook(webhook_id, user_id):
+    conn = get_db()
+    conn.execute("DELETE FROM webhooks WHERE id = ? AND user_id = ?", (webhook_id, user_id))
+    conn.commit()
+    _safe_close(conn)
+
+
+def update_webhook_triggered(webhook_id):
+    conn = get_db()
+    conn.execute(
+        "UPDATE webhooks SET last_triggered_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (webhook_id,),
+    )
+    conn.commit()
+    _safe_close(conn)
+
+
+def get_active_webhooks(user_id, event_type="new_matches"):
+    """Get active webhooks for a user that match the given event type."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM webhooks WHERE user_id = ? AND is_active = 1",
+        (user_id,),
+    ).fetchall()
+    _safe_close(conn)
+    result = []
+    for r in rows:
+        try:
+            types = json.loads(r["event_types"])
+        except (json.JSONDecodeError, TypeError):
+            types = ["new_matches"]
+        if event_type in types:
+            result.append(dict(r))
+    return result
+
+
+# --- Teams ---
+
+def create_team(name, created_by):
+    conn = get_db()
+    cursor = conn.execute(
+        "INSERT INTO teams (name, created_by) VALUES (?, ?)",
+        (name.strip(), created_by),
+    )
+    team_id = cursor.lastrowid
+    # Creator is automatically an admin member
+    conn.execute(
+        "INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, 'admin')",
+        (team_id, created_by),
+    )
+    conn.commit()
+    _safe_close(conn)
+    return team_id
+
+
+def get_user_teams(user_id):
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT t.*, tm.role, u.name as creator_name, u.email as creator_email,
+                  (SELECT COUNT(*) FROM team_members WHERE team_id = t.id) as member_count
+           FROM teams t
+           JOIN team_members tm ON tm.team_id = t.id AND tm.user_id = ?
+           JOIN users u ON u.id = t.created_by
+           ORDER BY t.created_at DESC""",
+        (user_id,),
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+def get_team(team_id):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM teams WHERE id = ?", (team_id,)).fetchone()
+    _safe_close(conn)
+    return dict(row) if row else None
+
+
+def get_team_members(team_id):
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT tm.*, u.name, u.email
+           FROM team_members tm
+           JOIN users u ON u.id = tm.user_id
+           WHERE tm.team_id = ?
+           ORDER BY tm.joined_at ASC""",
+        (team_id,),
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+def is_team_member(team_id, user_id):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id FROM team_members WHERE team_id = ? AND user_id = ?",
+        (team_id, user_id),
+    ).fetchone()
+    _safe_close(conn)
+    return row is not None
+
+
+def get_team_member_role(team_id, user_id):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT role FROM team_members WHERE team_id = ? AND user_id = ?",
+        (team_id, user_id),
+    ).fetchone()
+    _safe_close(conn)
+    return row["role"] if row else None
+
+
+def add_team_member(team_id, user_id, role="member"):
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, ?)",
+            (team_id, user_id, role),
+        )
+        conn.commit()
+    except sqlite3.IntegrityError:
+        _safe_close(conn)
+        return False
+    _safe_close(conn)
+    return True
+
+
+def remove_team_member(team_id, user_id):
+    conn = get_db()
+    conn.execute(
+        "DELETE FROM team_members WHERE team_id = ? AND user_id = ?",
+        (team_id, user_id),
+    )
+    conn.commit()
+    _safe_close(conn)
+
+
+def delete_team(team_id):
+    conn = get_db()
+    conn.execute("DELETE FROM teams WHERE id = ?", (team_id,))
+    conn.commit()
+    _safe_close(conn)
+
+
+def share_job_with_team(team_id, shared_by, job_key, title="", company="", location="", apply_url="", notes=""):
+    conn = get_db()
+    cursor = conn.execute(
+        """INSERT INTO team_shared_jobs (team_id, shared_by, job_key, title, company, location, apply_url, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (team_id, shared_by, job_key, title, company, location, apply_url, notes),
+    )
+    conn.commit()
+    jid = cursor.lastrowid
+    _safe_close(conn)
+    return jid
+
+
+def get_team_shared_jobs(team_id):
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT tsj.*, u.name as shared_by_name, u.email as shared_by_email
+           FROM team_shared_jobs tsj
+           JOIN users u ON u.id = tsj.shared_by
+           WHERE tsj.team_id = ?
+           ORDER BY tsj.created_at DESC""",
+        (team_id,),
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+def get_team_shared_job(job_id):
+    conn = get_db()
+    row = conn.execute(
+        """SELECT tsj.*, u.name as shared_by_name, u.email as shared_by_email
+           FROM team_shared_jobs tsj
+           JOIN users u ON u.id = tsj.shared_by
+           WHERE tsj.id = ?""",
+        (job_id,),
+    ).fetchone()
+    _safe_close(conn)
+    return dict(row) if row else None
+
+
+def add_team_job_comment(team_shared_job_id, user_id, comment):
+    conn = get_db()
+    cursor = conn.execute(
+        "INSERT INTO team_job_comments (team_shared_job_id, user_id, comment) VALUES (?, ?, ?)",
+        (team_shared_job_id, user_id, comment),
+    )
+    conn.commit()
+    cid = cursor.lastrowid
+    _safe_close(conn)
+    return cid
+
+
+def get_team_job_comments(team_shared_job_id):
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT tjc.*, u.name, u.email
+           FROM team_job_comments tjc
+           JOIN users u ON u.id = tjc.user_id
+           WHERE tjc.team_shared_job_id = ?
+           ORDER BY tjc.created_at ASC""",
+        (team_shared_job_id,),
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+def get_team_activity(team_id, limit=20):
+    """Get recent team activity (shares and comments)."""
+    conn = get_db()
+    # Get recent shared jobs
+    shares = conn.execute(
+        """SELECT 'share' as activity_type, tsj.created_at, u.name as user_name, u.email as user_email,
+                  tsj.title as job_title, tsj.company as job_company, tsj.id as item_id
+           FROM team_shared_jobs tsj
+           JOIN users u ON u.id = tsj.shared_by
+           WHERE tsj.team_id = ?
+           ORDER BY tsj.created_at DESC LIMIT ?""",
+        (team_id, limit),
+    ).fetchall()
+
+    # Get recent comments
+    comments = conn.execute(
+        """SELECT 'comment' as activity_type, tjc.created_at, u.name as user_name, u.email as user_email,
+                  tsj.title as job_title, tsj.company as job_company, tjc.team_shared_job_id as item_id
+           FROM team_job_comments tjc
+           JOIN users u ON u.id = tjc.user_id
+           JOIN team_shared_jobs tsj ON tsj.id = tjc.team_shared_job_id
+           WHERE tsj.team_id = ?
+           ORDER BY tjc.created_at DESC LIMIT ?""",
+        (team_id, limit),
+    ).fetchall()
+
+    _safe_close(conn)
+
+    activity = [dict(r) for r in shares] + [dict(r) for r in comments]
+    activity.sort(key=lambda a: a["created_at"], reverse=True)
+    return activity[:limit]
+
+
+# --- Admin ---
+
+def get_admin_stats():
+    """Get aggregate system stats for admin dashboard."""
+    conn = get_db()
+    stats = {}
+    stats["total_users"] = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()["c"]
+    stats["total_searches"] = conn.execute("SELECT COUNT(*) as c FROM search_history").fetchone()["c"]
+    stats["total_api_calls"] = conn.execute("SELECT COUNT(*) as c FROM api_usage").fetchone()["c"]
+    stats["total_cost"] = conn.execute("SELECT COALESCE(SUM(estimated_cost_usd), 0) as c FROM api_usage").fetchone()["c"]
+    stats["active_alerts"] = conn.execute("SELECT COUNT(*) as c FROM saved_searches WHERE is_active = 1").fetchone()["c"]
+    stats["total_applied"] = conn.execute("SELECT COUNT(*) as c FROM applied_jobs").fetchone()["c"]
+    stats["total_bookmarks"] = conn.execute("SELECT COUNT(*) as c FROM bookmarked_jobs").fetchone()["c"]
+    stats["total_teams"] = conn.execute("SELECT COUNT(*) as c FROM teams").fetchone()["c"]
+    stats["total_resumes"] = conn.execute("SELECT COUNT(*) as c FROM resumes").fetchone()["c"]
+    _safe_close(conn)
+    return stats
+
+
+def get_admin_users():
+    """Get all users with aggregate stats for admin view."""
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT u.id, u.email, u.name, u.is_admin, u.created_at,
+                  (SELECT COUNT(*) FROM search_history WHERE user_id = u.id) as search_count,
+                  (SELECT COUNT(*) FROM applied_jobs WHERE user_id = u.id) as applied_count,
+                  (SELECT MAX(searched_at) FROM search_history WHERE user_id = u.id) as last_active
+           FROM users u
+           ORDER BY u.created_at DESC""",
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+def is_user_admin(user_id):
+    conn = get_db()
+    row = conn.execute("SELECT is_admin FROM users WHERE id = ?", (user_id,)).fetchone()
+    _safe_close(conn)
+    return bool(row and row["is_admin"])

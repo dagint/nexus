@@ -16,6 +16,12 @@ A Chrome extension that lets you save job listings directly from supported job s
 - Glassdoor (`glassdoor.com/job-listing/*`)
 - Greenhouse (`greenhouse.io`)
 - Lever (`lever.co`)
+- Dice (`dice.com`)
+- Wellfound / AngelList (`wellfound.com`, `angel.co`)
+- RemoteOK (`remoteok.com`, `remoteok.io`)
+- BuiltIn (`builtin.com`)
+- SimplyHired (`simplyhired.com`)
+- ZipRecruiter (`ziprecruiter.com`)
 
 ## Installation
 

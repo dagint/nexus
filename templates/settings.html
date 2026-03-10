@@ -80,8 +80,83 @@
                 </div>
             </div>
 
+            <!-- Scoring Weights -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Match Scoring Weights</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">Adjust how much each factor affects your job match scores. 50 is the default (neutral). Higher values increase importance; lower values decrease it.</p>
+
+                    {% set weights = {} %}
+                    {% if settings.scoring_weights %}
+                        {% set weights = settings.scoring_weights | tojson | default('{}') %}
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <label for="weight_skills" class="form-label d-flex justify-content-between">
+                            <span>Skills Match</span>
+                            <span class="text-muted" id="weight_skills_val">{{ scoring_weights.skills }}</span>
+                        </label>
+                        <input type="range" class="form-range" id="weight_skills" name="weight_skills"
+                               min="0" max="100" value="{{ scoring_weights.skills }}"
+                               oninput="document.getElementById('weight_skills_val').textContent = this.value">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="weight_location" class="form-label d-flex justify-content-between">
+                            <span>Location</span>
+                            <span class="text-muted" id="weight_location_val">{{ scoring_weights.location }}</span>
+                        </label>
+                        <input type="range" class="form-range" id="weight_location" name="weight_location"
+                               min="0" max="100" value="{{ scoring_weights.location }}"
+                               oninput="document.getElementById('weight_location_val').textContent = this.value">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="weight_salary" class="form-label d-flex justify-content-between">
+                            <span>Salary</span>
+                            <span class="text-muted" id="weight_salary_val">{{ scoring_weights.salary }}</span>
+                        </label>
+                        <input type="range" class="form-range" id="weight_salary" name="weight_salary"
+                               min="0" max="100" value="{{ scoring_weights.salary }}"
+                               oninput="document.getElementById('weight_salary_val').textContent = this.value">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="weight_experience" class="form-label d-flex justify-content-between">
+                            <span>Experience/Seniority</span>
+                            <span class="text-muted" id="weight_experience_val">{{ scoring_weights.experience }}</span>
+                        </label>
+                        <input type="range" class="form-range" id="weight_experience" name="weight_experience"
+                               min="0" max="100" value="{{ scoring_weights.experience }}"
+                               oninput="document.getElementById('weight_experience_val').textContent = this.value">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="weight_remote" class="form-label d-flex justify-content-between">
+                            <span>Remote Preference</span>
+                            <span class="text-muted" id="weight_remote_val">{{ scoring_weights.remote }}</span>
+                        </label>
+                        <input type="range" class="form-range" id="weight_remote" name="weight_remote"
+                               min="0" max="100" value="{{ scoring_weights.remote }}"
+                               oninput="document.getElementById('weight_remote_val').textContent = this.value">
+                    </div>
+                </div>
+            </div>
+
             <button type="submit" class="btn btn-primary">Save Settings</button>
         </form>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">Integrations</h5>
+            </div>
+            <div class="card-body">
+                <a href="{{ url_for('webhooks_settings') }}" class="btn btn-outline-primary btn-sm me-2">Manage Webhooks</a>
+                <a href="{{ url_for('teams_list') }}" class="btn btn-outline-primary btn-sm">Manage Teams</a>
+            </div>
+        </div>
 
         <div class="card mt-4">
             <div class="card-header">

@@ -31,11 +31,11 @@
         <thead>
             <tr>
                 <th>Job</th>
-                <th>Company</th>
+                <th class="d-none d-md-table-cell">Company</th>
                 <th>Stage</th>
-                <th>Applied</th>
+                <th class="d-none d-md-table-cell">Applied</th>
                 <th>Follow-up</th>
-                <th>Details</th>
+                <th class="d-none d-md-table-cell">Details</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -46,7 +46,7 @@
                     <strong>{{ job.title }}</strong>
                     {% if job.location %}<br><small class="text-muted">{{ job.location }}</small>{% endif %}
                 </td>
-                <td>{{ job.company }}</td>
+                <td class="d-none d-md-table-cell">{{ job.company }}</td>
                 <td>
                     <select class="form-select form-select-sm stage-select" data-job-key="{{ job.job_key }}" style="width: auto">
                         {% for stage in stages %}
@@ -54,14 +54,18 @@
                         {% endfor %}
                     </select>
                 </td>
-                <td><small>{{ job.applied_at[:10] if job.applied_at else '' }}</small></td>
+                <td class="d-none d-md-table-cell"><small>{{ job.applied_at[:10] if job.applied_at else '' }}</small></td>
                 <td>
-                    <input type="date" class="form-control form-control-sm follow-up-input"
+                    <input type="date" class="form-control form-control-sm follow-up-input
+                        {% if job.follow_up_date and job.follow_up_date < today %}border-danger{% endif %}"
                            data-job-key="{{ job.job_key }}"
                            value="{{ job.follow_up_date or '' }}"
                            style="width: 140px">
+                    {% if job.follow_up_date and job.follow_up_date < today %}
+                    <small class="text-danger">Overdue</small>
+                    {% endif %}
                 </td>
-                <td>
+                <td class="d-none d-md-table-cell">
                     <button class="btn btn-sm btn-outline-info" type="button"
                             data-bs-toggle="collapse" data-bs-target="#details-{{ loop.index }}"
                             aria-expanded="false">

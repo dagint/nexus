@@ -162,7 +162,7 @@ def send_password_reset_email(email, token, base_url):
 
 
 def _simple_html(jobs, search_query):
-    """Fallback HTML template for emails."""
+    """Fallback HTML template for emails with dark mode support."""
     parts = []
     for job in jobs[:20]:
         score = job.get("match_score", "?")
@@ -177,17 +177,27 @@ def _simple_html(jobs, search_query):
 
         parts.append(f"""
         <tr>
-            <td style="padding:8px;border-bottom:1px solid #eee">
+            <td class="job-row" style="padding:8px;border-bottom:1px solid #eee">
                 <strong>{escape(job['title'])}</strong> {badge}<br>
-                <span style="color:#666">{escape(job['company'])}</span> — {escape(job.get('location', ''))}<br>
+                <span class="text-secondary-email" style="color:#666">{escape(job['company'])}</span> — {escape(job.get('location', ''))}<br>
                 <small>Score: {score}/100 | {escape(job.get('remote_status', ''))} | {escape(job.get('source', ''))}</small><br>
-                <a href="{escape(job.get('apply_url', '#'))}">Apply &rarr;</a>
+                <a href="{escape(job.get('apply_url', '#'))}" style="color:#007bff">Apply &rarr;</a>
             </td>
         </tr>""")
 
     rows = "".join(parts)
     return f"""
-    <html><body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+    <html><head><style>
+    @media (prefers-color-scheme: dark) {{
+        body {{ background-color: #1a1a2e !important; color: #e0e0e0 !important; }}
+        h2 {{ color: #e0e0e0 !important; }}
+        .job-row {{ border-bottom-color: #2a2a4a !important; }}
+        .text-secondary-email {{ color: #a0a0a0 !important; }}
+        a {{ color: #64b5f6 !important; }}
+        table {{ background: #16213e !important; }}
+    }}
+    </style></head>
+    <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background-color:#ffffff;color:#333333">
     <h2>Job Alert: {len(jobs)} new matches</h2>
     <p>Search: <strong>{escape(search_query)}</strong></p>
     <table style="width:100%;border-collapse:collapse">{rows}</table>

@@ -19,18 +19,32 @@ def _load_role_aliases():
     return _role_aliases
 
 
-def score_job(job, resume_data, user_prefs=None, preference_profile=None):
+def score_job(job, resume_data, user_prefs=None, preference_profile=None, scoring_weights=None):
     """Score a job 0-100 based on match with resume data.
 
     resume_data: output from skills_extractor (smart or heuristic)
     user_prefs: dict with timezone, seniority preferences, etc.
     preference_profile: dict from preference_learner.build_preference_profile()
+    scoring_weights: optional dict with keys 'skills', 'location', 'salary', 'experience', 'remote'
+                     each 0-100, defaults to 50 (neutral). Adjusts the raw category scores.
     """
+    # Default weights (50 = neutral, no adjustment)
+    weights = {
+        "skills": 50,
+        "location": 50,
+        "salary": 50,
+        "experience": 50,
+        "remote": 50,
+    }
+    if scoring_weights:
+        weights.update({k: v for k, v in scoring_weights.items() if k in weights})
+
     score = 0
     reasons = []
 
     # --- Skill overlap (40 points max) ---
     skill_score, skill_reasons = _score_skills(job, resume_data)
+    skill_score = _apply_weight(skill_score, 40, weights["skills"])
     score += skill_score
     reasons.extend(skill_reasons)
 
@@ -41,13 +55,31 @@ def score_job(job, resume_data, user_prefs=None, preference_profile=None):
 
     # --- Seniority fit (15 points max) ---
     seniority_score, seniority_reasons = _score_seniority(job, resume_data)
+    seniority_score = _apply_weight(seniority_score, 15, weights["experience"])
     score += seniority_score
     reasons.extend(seniority_reasons)
 
     # --- Location/remote preference (15 points max) ---
     location_score, location_reasons = _score_location(job, user_prefs)
+    location_score = _apply_weight(location_score, 15, weights["location"])
+    # Apply remote weight bonus/penalty
+    if weights["remote"] > 60 and job.get("remote_status") == "remote":
+        location_score = min(location_score + 3, 15)
+        if "Remote preference boost" not in [r for r in reasons]:
+            reasons.append("Remote preference boost")
+    elif weights["remote"] < 40 and job.get("remote_status") != "remote":
+        location_score = min(location_score + 2, 15)
     score += location_score
     reasons.extend(location_reasons)
+
+    # --- Salary weight adjustment ---
+    if weights["salary"] > 50 and (job.get("salary_min") or job.get("salary_max")):
+        sal = job.get("salary_max") or job.get("salary_min") or 0
+        if sal > 0:
+            bonus = min(int((weights["salary"] - 50) / 10), 5)
+            score += bonus
+            if bonus >= 3:
+                reasons.append("Salary priority boost")
 
     # --- Preference boost (up to +15, or -5 penalty) ---
     if preference_profile:
@@ -76,11 +108,23 @@ def score_job(job, resume_data, user_prefs=None, preference_profile=None):
     return job
 
 
-def score_jobs(jobs, resume_data, user_prefs=None, preference_profile=None):
+def _apply_weight(raw_score, max_score, weight):
+    """Apply a user weight (0-100, 50=neutral) to a raw score.
+
+    weight < 50 reduces the score; weight > 50 increases it.
+    """
+    if weight == 50:
+        return raw_score
+    # Scale factor: weight=0 -> 0.5x, weight=50 -> 1.0x, weight=100 -> 1.5x
+    factor = 0.5 + (weight / 100.0)
+    return min(round(raw_score * factor), max_score)
+
+
+def score_jobs(jobs, resume_data, user_prefs=None, preference_profile=None, scoring_weights=None):
     """Score and tier all jobs, filtering out low matches."""
     global _claude_title_call_count
     _claude_title_call_count = 0
-    scored = [score_job(job, resume_data, user_prefs, preference_profile) for job in jobs]
+    scored = [score_job(job, resume_data, user_prefs, preference_profile, scoring_weights) for job in jobs]
     # Filter out low matches
     scored = [j for j in scored if j["match_tier"] != "low"]
     # Sort by score descending

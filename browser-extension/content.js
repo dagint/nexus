@@ -144,6 +144,169 @@
     };
   }
 
+  function extractDice() {
+    return {
+      title: getText([
+        ".job-title",
+        'h1[data-cy="jobTitle"]',
+        "h1",
+      ]),
+      company: getText([
+        ".employer-name",
+        '[data-cy="companyNameLink"]',
+        '[data-cy="employerName"]',
+        ".topcard-alias a",
+      ]),
+      location: getText([
+        ".location",
+        '[data-cy="locationText"]',
+        ".job-info .icon-map-pin + span",
+      ]),
+      description: getHTML([
+        ".job-description",
+        '[data-cy="jobDescription"]',
+        "#jobDescription",
+        "#jobdescSec",
+      ]),
+      source: "dice",
+    };
+  }
+
+  function extractWellfound() {
+    return {
+      title: getText([
+        "h1",
+        '[data-test="JobTitle"]',
+        ".listing-title",
+      ]),
+      company: getText([
+        ".company-name",
+        '[data-test="CompanyName"]',
+        "h2 a",
+        ".styles_component__company a",
+      ]),
+      location: getText([
+        ".location",
+        '[data-test="Location"]',
+        ".styles_component__location",
+      ]),
+      description: getHTML([
+        ".description",
+        '[data-test="JobDescription"]',
+        ".job-description",
+        ".styles_description__content",
+      ]),
+      source: "wellfound",
+    };
+  }
+
+  function extractRemoteOK() {
+    return {
+      title: getText([
+        "h1",
+        "h2.company_and_position .position",
+        ".job-listing-header h2",
+      ]),
+      company: getText([
+        "h3.companyLink a",
+        "h2.company_and_position .company",
+        ".company-name",
+      ]),
+      location: getText([
+        ".location",
+        ".job-listing-location",
+      ]) || "Remote",
+      description: getHTML([
+        ".description",
+        ".job_description",
+        ".markdown",
+      ]),
+      source: "remoteok",
+    };
+  }
+
+  function extractBuiltIn() {
+    return {
+      title: getText([
+        "h1",
+        '[data-id="job-title"]',
+        ".job-title",
+      ]),
+      company: getText([
+        ".company-name",
+        '[data-id="company-name"]',
+        ".job-company-name",
+        ".company-header-name a",
+      ]),
+      location: getText([
+        ".job-info-location",
+        '[data-id="job-location"]',
+        ".job-location",
+      ]),
+      description: getHTML([
+        ".job-description",
+        '[data-id="job-description"]',
+        "#job-description",
+      ]),
+      source: "builtin",
+    };
+  }
+
+  function extractSimplyHired() {
+    return {
+      title: getText([
+        "h1",
+        ".jobposting-title h2",
+        '[data-testid="viewJobTitle"]',
+      ]),
+      company: getText([
+        ".jobposting-company",
+        '[data-testid="viewJobCompany"]',
+        ".company-name",
+      ]),
+      location: getText([
+        ".jobposting-location",
+        '[data-testid="viewJobLocation"]',
+        ".job-location",
+      ]),
+      description: getHTML([
+        ".jobposting-description",
+        '[data-testid="viewJobBody"]',
+        ".ViewJob-description",
+      ]),
+      source: "simplyhired",
+    };
+  }
+
+  function extractZipRecruiter() {
+    return {
+      title: getText([
+        "h1.job_title",
+        "h1",
+        ".job_title",
+        '[data-testid="job-title"]',
+      ]),
+      company: getText([
+        ".hiring_company_text",
+        ".company_name",
+        '[data-testid="company-name"]',
+        "a.t_company_name",
+      ]),
+      location: getText([
+        ".location_text",
+        ".job_location",
+        '[data-testid="job-location"]',
+      ]),
+      description: getHTML([
+        ".jobDescriptionSection",
+        ".job_description",
+        '[data-testid="job-description"]',
+        "#job-desc",
+      ]),
+      source: "ziprecruiter",
+    };
+  }
+
   function extractGeneric() {
     return {
       title: getText(["h1", "[class*='title']", "[class*='Title']"]),
@@ -174,6 +337,12 @@
     if (hostname.includes("glassdoor.com")) return extractGlassdoor();
     if (hostname.includes("greenhouse.io")) return extractGreenhouse();
     if (hostname.includes("lever.co")) return extractLever();
+    if (hostname.includes("dice.com")) return extractDice();
+    if (hostname.includes("wellfound.com") || hostname.includes("angel.co")) return extractWellfound();
+    if (hostname.includes("remoteok.com") || hostname.includes("remoteok.io")) return extractRemoteOK();
+    if (hostname.includes("builtin.com")) return extractBuiltIn();
+    if (hostname.includes("simplyhired.com")) return extractSimplyHired();
+    if (hostname.includes("ziprecruiter.com")) return extractZipRecruiter();
     return extractGeneric();
   }
 
