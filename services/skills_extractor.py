@@ -91,7 +91,7 @@ Seniority tiers: IC1=junior/new grad, IC2=mid, IC3=senior, IC4=staff, IC5=princi
 Resume:
 {text[:8000]}"""
 
-    response_text = call(prompt, model="claude-haiku-4-5-20251001", max_tokens=1500)
+    response_text = call(prompt, model="claude-haiku-4-5-20251001", max_tokens=1500, endpoint="skill_extract")
     if not response_text:
         raise RuntimeError("Claude API unavailable")
     # Extract JSON from response

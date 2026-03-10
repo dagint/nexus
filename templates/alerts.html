@@ -44,39 +44,80 @@
                             </div>
                         </div>
                     </div>
-                    <p class="small text-muted mb-3">Notifications will be sent to <strong>{{ current_user.email }}</strong></p>
+                    <p class="small text-muted mb-3">Notifications will be sent to <strong>{{ current_user.email }}</strong> (max 2 per day)</p>
 
                     <button type="submit" class="btn btn-primary">Create Alert</button>
                 </form>
             </div>
         </div>
 
-        <!-- Existing alerts -->
-        <h4 class="mb-3">Saved Alerts</h4>
+        <!-- Saved alerts -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0">Saved Alerts</h4>
+            {% if searches %}
+            <div class="d-flex gap-2">
+                {% set any_active = searches | selectattr('is_active') | list | length > 0 %}
+                {% set any_paused = searches | rejectattr('is_active') | list | length > 0 %}
+                {% if any_active %}
+                <form method="POST" action="/alerts/toggle-all" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="is_active" value="0">
+                    <button type="submit" class="btn btn-sm btn-outline-warning">Pause All</button>
+                </form>
+                {% endif %}
+                {% if any_paused %}
+                <form method="POST" action="/alerts/toggle-all" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="is_active" value="1">
+                    <button type="submit" class="btn btn-sm btn-outline-success">Enable All</button>
+                </form>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+
         {% if searches %}
         {% for search in searches %}
-        <div class="card mb-2">
+        <div class="card mb-2 {{ 'opacity-50' if not search.is_active }}">
             <div class="card-body d-flex justify-content-between align-items-center">
                 <div>
                     <strong>{{ search.query }}</strong>
                     {% if search.location %} in {{ search.location }}{% endif %}
                     {% if search.remote_only %}<span class="badge bg-success ms-1">Remote</span>{% endif %}
+                    {% if not search.is_active %}<span class="badge bg-warning text-dark ms-1">Paused</span>{% endif %}
                     <br>
                     <small class="text-muted">
-                        {{ search.email }} &mdash; {{ search.frequency }}
+                        {{ search.frequency }}
                         {% if search.last_notified_at %}
                         &mdash; Last sent: {{ search.last_notified_at[:16] }}
                         {% endif %}
                     </small>
                 </div>
-                <form method="POST" action="/alerts/{{ search.id }}/delete" class="d-inline">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn btn-sm btn-outline-danger"
-                            onclick="return confirm('Delete this alert?')">Delete</button>
-                </form>
+                <div class="d-flex gap-1">
+                    <form method="POST" action="/alerts/{{ search.id }}/toggle" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        {% if search.is_active %}
+                        <input type="hidden" name="is_active" value="0">
+                        <button type="submit" class="btn btn-sm btn-outline-warning" title="Pause this alert">Pause</button>
+                        {% else %}
+                        <input type="hidden" name="is_active" value="1">
+                        <button type="submit" class="btn btn-sm btn-outline-success" title="Enable this alert">Enable</button>
+                        {% endif %}
+                    </form>
+                    <form method="POST" action="/alerts/{{ search.id }}/delete" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-danger"
+                                onclick="return confirm('Delete this alert?')">Delete</button>
+                    </form>
+                </div>
             </div>
         </div>
         {% endfor %}
+
+        <div class="alert alert-info mt-3 small">
+            Alerts are checked hourly. Multiple alerts are consolidated into a single email digest.
+            You will receive at most 2 email notifications per day. Stale and staffing agency postings are excluded.
+        </div>
         {% else %}
         <p class="text-muted">No saved alerts yet. Create one above to get notified of new jobs.</p>
         {% endif %}

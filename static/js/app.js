@@ -1,5 +1,16 @@
 // Job Search Tool - Client-side filtering and interactions
 
+// CSRF-aware fetch wrapper
+function csrfFetch(url, options) {
+    options = options || {};
+    options.headers = options.headers || {};
+    var token = document.querySelector('meta[name="csrf-token"]');
+    if (token) {
+        options.headers["X-CSRFToken"] = token.getAttribute("content");
+    }
+    return fetch(url, options);
+}
+
 document.addEventListener("DOMContentLoaded", function () {
     // --- Theme toggle ---
     var themeToggle = document.getElementById("themeToggle");
@@ -65,7 +76,8 @@ document.addEventListener("DOMContentLoaded", function () {
             var isApplied = this.dataset.applied === "true";
 
             if (isApplied) {
-                fetch("/jobs/" + jobKey + "/applied", { method: "DELETE" })
+                csrfFetch("/jobs/" + jobKey + "/applied", { method: "DELETE" })
+                    .then(function (resp) { if (!resp.ok) throw new Error("Failed"); })
                     .then(function () {
                         btn.textContent = "Mark Applied";
                         btn.classList.remove("btn-outline-secondary");
@@ -73,23 +85,27 @@ document.addEventListener("DOMContentLoaded", function () {
                         btn.dataset.applied = "false";
                         btn.closest(".job-card").dataset.applied = "no";
                         applyFilters();
-                    });
+                    })
+                    .catch(function () { btn.textContent = "Error - retry"; });
             } else {
-                fetch("/jobs/" + jobKey + "/applied", {
+                csrfFetch("/jobs/" + jobKey + "/applied", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         title: this.dataset.title || "",
                         company: this.dataset.company || "",
                     }),
-                }).then(function () {
-                    btn.textContent = "Applied";
-                    btn.classList.remove("btn-outline-success");
-                    btn.classList.add("btn-outline-secondary");
-                    btn.dataset.applied = "true";
-                    btn.closest(".job-card").dataset.applied = "yes";
-                    applyFilters();
-                });
+                })
+                    .then(function (resp) { if (!resp.ok) throw new Error("Failed"); })
+                    .then(function () {
+                        btn.textContent = "Applied";
+                        btn.classList.remove("btn-outline-success");
+                        btn.classList.add("btn-outline-secondary");
+                        btn.dataset.applied = "true";
+                        btn.closest(".job-card").dataset.applied = "yes";
+                        applyFilters();
+                    })
+                    .catch(function () { btn.textContent = "Error - retry"; });
             }
         });
     });
@@ -98,7 +114,7 @@ document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll(".apply-link").forEach(function (link) {
         link.addEventListener("click", function () {
             var jobKey = this.dataset.jobKey;
-            fetch("/jobs/" + jobKey + "/applied", {
+            csrfFetch("/jobs/" + jobKey + "/applied", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -116,27 +132,32 @@ document.addEventListener("DOMContentLoaded", function () {
             var isBookmarked = this.dataset.bookmarked === "true";
 
             if (isBookmarked) {
-                fetch("/jobs/" + jobKey + "/bookmark", { method: "DELETE" })
+                csrfFetch("/jobs/" + jobKey + "/bookmark", { method: "DELETE" })
+                    .then(function (resp) { if (!resp.ok) throw new Error("Failed"); })
                     .then(function () {
                         btn.textContent = "Bookmark";
                         btn.classList.remove("btn-warning");
                         btn.classList.add("btn-outline-warning");
                         btn.dataset.bookmarked = "false";
-                    });
+                    })
+                    .catch(function () { btn.textContent = "Error - retry"; });
             } else {
-                fetch("/jobs/" + jobKey + "/bookmark", {
+                csrfFetch("/jobs/" + jobKey + "/bookmark", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         title: btn.dataset.title || "",
                         company: btn.dataset.company || "",
                     }),
-                }).then(function () {
-                    btn.textContent = "Bookmarked";
-                    btn.classList.remove("btn-outline-warning");
-                    btn.classList.add("btn-warning");
-                    btn.dataset.bookmarked = "true";
-                });
+                })
+                    .then(function (resp) { if (!resp.ok) throw new Error("Failed"); })
+                    .then(function () {
+                        btn.textContent = "Bookmarked";
+                        btn.classList.remove("btn-outline-warning");
+                        btn.classList.add("btn-warning");
+                        btn.dataset.bookmarked = "true";
+                    })
+                    .catch(function () { btn.textContent = "Error - retry"; });
             }
         });
     });
@@ -148,7 +169,8 @@ document.addEventListener("DOMContentLoaded", function () {
             var isDismissed = this.dataset.dismissed === "true";
 
             if (isDismissed) {
-                fetch("/jobs/" + jobKey + "/dismiss", { method: "DELETE" })
+                csrfFetch("/jobs/" + jobKey + "/dismiss", { method: "DELETE" })
+                    .then(function (resp) { if (!resp.ok) throw new Error("Failed"); })
                     .then(function () {
                         btn.innerHTML = '<span aria-hidden="true">&darr;</span> Not Interested';
                         btn.classList.remove("btn-secondary");
@@ -156,23 +178,27 @@ document.addEventListener("DOMContentLoaded", function () {
                         btn.dataset.dismissed = "false";
                         btn.closest(".job-card").dataset.dismissed = "no";
                         applyFilters();
-                    });
+                    })
+                    .catch(function () { btn.textContent = "Error - retry"; });
             } else {
-                fetch("/jobs/" + jobKey + "/dismiss", {
+                csrfFetch("/jobs/" + jobKey + "/dismiss", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         title: this.dataset.title || "",
                         company: this.dataset.company || "",
                     }),
-                }).then(function () {
-                    btn.textContent = "Dismissed";
-                    btn.classList.remove("btn-outline-secondary");
-                    btn.classList.add("btn-secondary");
-                    btn.dataset.dismissed = "true";
-                    btn.closest(".job-card").dataset.dismissed = "yes";
-                    applyFilters();
-                });
+                })
+                    .then(function (resp) { if (!resp.ok) throw new Error("Failed"); })
+                    .then(function () {
+                        btn.textContent = "Dismissed";
+                        btn.classList.remove("btn-outline-secondary");
+                        btn.classList.add("btn-secondary");
+                        btn.dataset.dismissed = "true";
+                        btn.closest(".job-card").dataset.dismissed = "yes";
+                        applyFilters();
+                    })
+                    .catch(function () { btn.textContent = "Error - retry"; });
             }
         });
     });
@@ -188,7 +214,7 @@ document.addEventListener("DOMContentLoaded", function () {
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating...';
 
-            fetch("/jobs/cover-letter", {
+            csrfFetch("/jobs/cover-letter", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -300,7 +326,7 @@ document.addEventListener("DOMContentLoaded", function () {
             btn.disabled = true;
             btn.textContent = "Sharing...";
 
-            fetch("/jobs/share", {
+            csrfFetch("/jobs/share", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -344,7 +370,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (notifBell) {
         notifBell.addEventListener("click", function () {
-            fetch("/notifications")
+            csrfFetch("/notifications")
                 .then(function (resp) { return resp.json(); })
                 .then(function (data) {
                     if (!data.notifications || data.notifications.length === 0) {
@@ -367,7 +393,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (markAllReadBtn) {
         markAllReadBtn.addEventListener("click", function () {
-            fetch("/notifications/read", {
+            csrfFetch("/notifications/read", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({}),
@@ -409,7 +435,7 @@ document.addEventListener("DOMContentLoaded", function () {
             screeningSubmit.disabled = true;
             screeningSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating...';
 
-            fetch("/jobs/screening-answers", {
+            csrfFetch("/jobs/screening-answers", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -489,7 +515,7 @@ document.addEventListener("DOMContentLoaded", function () {
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Drafting...';
 
-            fetch("/jobs/application-draft", {
+            csrfFetch("/jobs/application-draft", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -592,7 +618,7 @@ document.addEventListener("DOMContentLoaded", function () {
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Preparing...';
 
-            fetch("/jobs/interview-prep", {
+            csrfFetch("/jobs/interview-prep", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ title: title, company: company, description: description }),

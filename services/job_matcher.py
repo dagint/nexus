@@ -6,6 +6,8 @@ import re
 logger = logging.getLogger(__name__)
 
 _role_aliases = None
+_MAX_CLAUDE_TITLE_CALLS = 10
+_claude_title_call_count = 0
 
 
 def _load_role_aliases():
@@ -76,6 +78,8 @@ def score_job(job, resume_data, user_prefs=None, preference_profile=None):
 
 def score_jobs(jobs, resume_data, user_prefs=None, preference_profile=None):
     """Score and tier all jobs, filtering out low matches."""
+    global _claude_title_call_count
+    _claude_title_call_count = 0
     scored = [score_job(job, resume_data, user_prefs, preference_profile) for job in jobs]
     # Filter out low matches
     scored = [j for j in scored if j["match_tier"] != "low"]
@@ -119,7 +123,7 @@ Match Score: {job.get('match_score', 0)}/100
 
 Return ONLY the paragraph, no preamble."""
 
-    return call(prompt, model="claude-haiku-4-5-20251001", max_tokens=200)
+    return call(prompt, model="claude-haiku-4-5-20251001", max_tokens=200, endpoint="match_summary")
 
 
 def _get_skill_names(resume_data):
@@ -223,6 +227,11 @@ def _score_title(job, resume_data):
 
 def _claude_title_match(job_title, resume_titles):
     """Use Claude to assess title relevance for ambiguous cases."""
+    global _claude_title_call_count
+    if _claude_title_call_count >= _MAX_CLAUDE_TITLE_CALLS:
+        return None
+    _claude_title_call_count += 1
+
     from services.ai_client import is_available, call
 
     if not is_available():
@@ -234,7 +243,7 @@ Return ONLY a JSON object: {{"score": <number>, "reason": "<brief reason>"}}
 Job title: {job_title}
 Candidate titles: {', '.join(resume_titles[:5])}"""
 
-    response_text = call(prompt, model="claude-haiku-4-5-20251001", max_tokens=100)
+    response_text = call(prompt, model="claude-haiku-4-5-20251001", max_tokens=100, endpoint="title_match")
     if response_text:
         try:
             json_match = re.search(r"\{[\s\S]*\}", response_text)

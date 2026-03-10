@@ -109,7 +109,7 @@ class TestSearchFlow:
     def test_search_page_loads(self, client):
         resp = client.get("/")
         assert resp.status_code == 200
-        assert b"Find Your Next Job" in resp.data
+        assert b"Find Your Next Role" in resp.data
 
     @patch("services.job_search.search_all")
     @patch("services.company_enricher.enrich_jobs", side_effect=lambda jobs: jobs)

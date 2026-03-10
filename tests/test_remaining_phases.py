@@ -428,63 +428,51 @@ class TestJobMatcherClaudeSummary:
             assert "Python" in summary
             assert "Exact title match" in summary
 
-    def test_generate_match_summary_calls_claude_for_strong(self):
+    @patch("services.ai_client.call")
+    @patch("services.ai_client.is_available", return_value=True)
+    def test_generate_match_summary_calls_claude_for_strong(self, mock_available, mock_call):
         from services.job_matcher import generate_match_summary
 
-        mock_client = MagicMock()
-        mock_msg = MagicMock()
-        mock_msg.content = [MagicMock(text="Great match because of Python and AWS expertise.")]
-        mock_client.messages.create.return_value = mock_msg
+        mock_call.return_value = "Great match because of Python and AWS expertise."
 
-        mock_anthropic = MagicMock()
-        mock_anthropic.Anthropic.return_value = mock_client
+        job = {
+            "title": "Senior Dev",
+            "company": "TechCo",
+            "description": "Python AWS role",
+            "match_tier": "strong",
+            "match_score": 85,
+            "match_reasons": ["Skills match: Python"],
+        }
+        resume_data = {
+            "skills": [{"skill": "Python", "weight": 1.0}],
+            "job_titles": ["Software Engineer"],
+            "inferred_titles": [],
+        }
 
-        with patch("config.Config") as mock_config:
-            mock_config.ANTHROPIC_API_KEY = "test-key"
-            with patch.dict(sys.modules, {"anthropic": mock_anthropic}):
-                job = {
-                    "title": "Senior Dev",
-                    "company": "TechCo",
-                    "description": "Python AWS role",
-                    "match_tier": "strong",
-                    "match_score": 85,
-                    "match_reasons": ["Skills match: Python"],
-                }
-                resume_data = {
-                    "skills": [{"skill": "Python", "weight": 1.0}],
-                    "job_titles": ["Software Engineer"],
-                    "inferred_titles": [],
-                }
+        summary = generate_match_summary(job, resume_data)
+        assert "Python" in summary
+        mock_call.assert_called_once()
 
-                summary = generate_match_summary(job, resume_data)
-                assert "Python" in summary
-                mock_client.messages.create.assert_called_once()
-
-    def test_claude_failure_falls_back_to_heuristic(self):
+    @patch("services.ai_client.call")
+    @patch("services.ai_client.is_available", return_value=True)
+    def test_claude_failure_falls_back_to_heuristic(self, mock_available, mock_call):
         from services.job_matcher import generate_match_summary
 
-        mock_client = MagicMock()
-        mock_client.messages.create.side_effect = Exception("API down")
+        mock_call.side_effect = Exception("API down")
 
-        mock_anthropic = MagicMock()
-        mock_anthropic.Anthropic.return_value = mock_client
+        job = {
+            "title": "Dev",
+            "company": "Co",
+            "description": "Code",
+            "match_tier": "strong",
+            "match_score": 80,
+            "match_reasons": ["Skills match: Go"],
+        }
+        resume_data = {"skills": [], "job_titles": [], "inferred_titles": []}
 
-        with patch("config.Config") as mock_config:
-            mock_config.ANTHROPIC_API_KEY = "test-key"
-            with patch.dict(sys.modules, {"anthropic": mock_anthropic}):
-                job = {
-                    "title": "Dev",
-                    "company": "Co",
-                    "description": "Code",
-                    "match_tier": "strong",
-                    "match_score": 80,
-                    "match_reasons": ["Skills match: Go"],
-                }
-                resume_data = {"skills": [], "job_titles": [], "inferred_titles": []}
-
-                summary = generate_match_summary(job, resume_data)
-                # Should fallback to heuristic rather than raising
-                assert "Go" in summary
+        summary = generate_match_summary(job, resume_data)
+        # Should fallback to heuristic rather than raising
+        assert "Go" in summary
 
     def test_no_summary_for_non_strong_without_key(self):
         from services.job_matcher import generate_match_summary

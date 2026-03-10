@@ -139,28 +139,20 @@ class TestInterviewPrepHeuristic:
 
 
 class TestInterviewPrepWithAI:
-    @patch("services.interview_prep.Config")
-    def test_uses_ai_when_available(self, mock_config):
-        mock_config.ANTHROPIC_API_KEY = "test-key"
+    @patch("services.ai_client.call")
+    def test_uses_ai_when_available(self, mock_call):
         ai_result = {
             "technical_questions": [{"question": "AI Q1", "talking_points": "AI TP1"}],
             "behavioral_questions": [{"question": "AI BQ1", "talking_points": "AI BTP1"}],
             "questions_to_ask": ["AI ask 1"],
             "company_research_tips": ["AI tip 1"],
         }
-        mock_message = MagicMock()
-        mock_message.content = [MagicMock(text=json.dumps(ai_result))]
+        mock_call.return_value = json.dumps(ai_result)
 
-        mock_anthropic_module = MagicMock()
-        mock_client = MagicMock()
-        mock_anthropic_module.Anthropic.return_value = mock_client
-        mock_client.messages.create.return_value = mock_message
-
-        with patch.dict("sys.modules", {"anthropic": mock_anthropic_module}):
-            from services.interview_prep import _generate_ai_prep
-            result = _generate_ai_prep(
-                SAMPLE_RESUME, "Engineer", "Co", SAMPLE_JOB_DESC
-            )
+        from services.interview_prep import _generate_ai_prep
+        result = _generate_ai_prep(
+            SAMPLE_RESUME, "Engineer", "Co", SAMPLE_JOB_DESC
+        )
 
         assert result is not None
         assert result["technical_questions"][0]["question"] == "AI Q1"

@@ -29,7 +29,7 @@ Job Description:
 
 Return ONLY the cover letter text, no preamble or metadata."""
 
-    result = call(prompt, model="claude-sonnet-4-20250514", max_tokens=1000)
+    result = call(prompt, model="claude-sonnet-4-20250514", max_tokens=1000, endpoint="cover_letter")
     if result:
         return result
 

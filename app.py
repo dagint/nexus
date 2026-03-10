@@ -3,6 +3,7 @@ import io
 import json
 import logging
 import os
+import re
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, Response
 from flask_wtf.csrf import CSRFProtect
@@ -15,6 +16,7 @@ from logging_config import setup_logging
 from database import (
     init_db, get_user_by_id, create_user, authenticate_user,
     create_saved_search, get_saved_searches, delete_saved_search,
+    toggle_saved_search, toggle_all_saved_searches,
     mark_applied, unmark_applied, get_applied_job_keys, get_applied_jobs,
     get_applied_stats, update_applied_stage, update_applied_notes, PIPELINE_STAGES,
     get_user_settings, update_user_settings,
@@ -29,6 +31,7 @@ from database import (
     create_notification, get_unread_notifications, get_unread_count, mark_notifications_read,
     get_role_velocity,
     dismiss_job, undismiss_job, get_dismissed_job_keys,
+    get_api_usage_summary, get_api_usage_daily, get_api_usage_recent,
 )
 
 setup_logging()
@@ -37,7 +40,18 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.config.from_object(Config)
 
+from database import close_db
+app.teardown_appcontext(close_db)
+
 RESULTS_PER_PAGE = 20
+
+
+def _safe_int(value, default=0):
+    """Safely convert a value to int, returning default on failure."""
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default
 
 # Security
 csrf = CSRFProtect(app)
@@ -78,7 +92,10 @@ def set_security_headers(response):
         "style-src 'self' 'unsafe-inline'; "
         "script-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; "
-        "font-src 'self';"
+        "font-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self';"
     )
     return response
 
@@ -150,6 +167,10 @@ def login():
         if user_data:
             login_user(User(user_data), remember=bool(request.form.get("remember")))
             next_page = request.args.get("next")
+            if next_page and not next_page.startswith("/"):
+                next_page = None
+            if next_page and next_page.startswith("//"):
+                next_page = None
             return redirect(next_page or url_for("index"))
 
         flash("Invalid email or password.", "error")
@@ -256,8 +277,13 @@ def reset_password(token):
             flash("Password must be at least 8 characters.", "error")
             return redirect(url_for("reset_password", token=token))
 
-        update_user_password(user_id, new_password)
-        consume_reset_token(token)
+        # Atomically consume token to prevent race condition
+        consumed_user_id = consume_reset_token(token)
+        if not consumed_user_id:
+            flash("This password reset link is invalid or has expired.", "error")
+            return redirect(url_for("forgot_password"))
+
+        update_user_password(consumed_user_id, new_password)
         flash("Your password has been reset. You can now log in.", "success")
         return redirect(url_for("login"))
 
@@ -420,12 +446,16 @@ def search():
     except Exception as e:
         logger.warning("Company enrichment failed: %s", e)
 
+    # Fetch user settings once for commute + scoring
+    user_settings = None
+    if current_user.is_authenticated:
+        user_settings = get_user_settings(current_user.id)
+
     # Commute check for non-remote jobs
-    if current_user.is_authenticated and location:
+    if user_settings and location:
         try:
             from services.commute_checker import check_commute_for_jobs
-            settings = get_user_settings(current_user.id)
-            max_commute = settings.get("max_commute_minutes", 60)
+            max_commute = user_settings.get("max_commute_minutes", 60)
             jobs = check_commute_for_jobs(jobs, location, max_commute)
         except Exception as e:
             logger.warning("Commute check failed: %s", e)
@@ -435,7 +465,7 @@ def search():
     preference_profile = None
     if resume_data:
         if current_user.is_authenticated:
-            user_prefs = get_user_settings(current_user.id)
+            user_prefs = user_settings
             # Build preference profile from bookmarked/applied/dismissed jobs
             try:
                 from services.preference_learner import build_preference_profile
@@ -451,13 +481,16 @@ def search():
             if job.get("match_tier") == "strong" and job.get("match_reasons"):
                 job["match_summary"] = "Matches your profile: " + "; ".join(job["match_reasons"][:3]) + "."
 
-    # Role velocity signal
-    from database import get_role_velocity
-    for job in jobs:
-        try:
-            velocity = get_role_velocity(job.get("company", ""), job.get("title", ""))
-            job["role_velocity"] = velocity if velocity > 1 else None
-        except Exception:
+    # Role velocity signal (batch query — single DB connection)
+    from database import get_role_velocities_batch
+    try:
+        pairs = [(j.get("company", ""), j.get("title", "")) for j in jobs]
+        velocities = get_role_velocities_batch(pairs)
+        for job in jobs:
+            v = velocities.get((job.get("company", ""), job.get("title", "")), 0)
+            job["role_velocity"] = v if v > 1 else None
+    except Exception:
+        for job in jobs:
             job["role_velocity"] = None
 
     # Sort
@@ -469,18 +502,15 @@ def search():
     else:
         jobs = sort_within_tiers(jobs)
 
-    # Record search history
+    # Record search history (no notification on every search to avoid spam)
     if current_user.is_authenticated:
         add_search_history(current_user.id, query, location, remote_only, resume_id, len(jobs))
-        if len(jobs) > 0:
-            create_notification(
-                current_user.id,
-                f"Found {len(jobs)} jobs for \"{query}\"",
-                url_for("search", query=query, location=location),
-            )
 
     # Pagination
-    page = int(request.args.get("page", request.form.get("page", 1)))
+    try:
+        page = int(request.args.get("page", request.form.get("page", 1)))
+    except (ValueError, TypeError):
+        page = 1
     total_jobs = len(jobs)
     total_pages = max(1, (total_jobs + RESULTS_PER_PAGE - 1) // RESULTS_PER_PAGE)
     page = max(1, min(page, total_pages))
@@ -508,7 +538,7 @@ def search():
     return render_template(
         "results.html",
         jobs=paginated_jobs,
-        all_jobs=jobs,  # For export
+        all_jobs_count=len(jobs),
         query=query,
         location=location,
         total_jobs=total_jobs,
@@ -549,18 +579,19 @@ def export_csv():
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["Title", "Company", "Location", "Remote Status", "Salary Min", "Salary Max",
-                      "Posted Date", "Source", "Apply URL"])
+                      "Posted Date", "Source", "Match Score", "Apply URL"])
     for job in jobs:
         writer.writerow([
             job.get("title", ""), job.get("company", ""), job.get("location", ""),
             job.get("remote_status", ""), job.get("salary_min", ""), job.get("salary_max", ""),
-            job.get("posted_date", ""), job.get("source", ""), job.get("apply_url", ""),
+            job.get("posted_date", ""), job.get("source", ""), job.get("match_score", ""),
+            job.get("apply_url", ""),
         ])
 
     return Response(
         output.getvalue(),
         mimetype="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=jobs_{query.replace(' ', '_')}.csv"},
+        headers={"Content-Disposition": f"attachment; filename=jobs_{re.sub(r'[^a-zA-Z0-9_-]', '_', query)}.csv"},
     )
 
 
@@ -599,10 +630,29 @@ def delete_alert(alert_id):
     return redirect(url_for("alerts"))
 
 
+@app.route("/alerts/<int:alert_id>/toggle", methods=["POST"])
+@login_required
+def toggle_alert(alert_id):
+    is_active = request.form.get("is_active") == "1"
+    toggle_saved_search(alert_id, current_user.id, is_active)
+    status = "enabled" if is_active else "paused"
+    flash(f"Alert {status}.", "success")
+    return redirect(url_for("alerts"))
+
+
+@app.route("/alerts/toggle-all", methods=["POST"])
+@login_required
+def toggle_all_alerts():
+    is_active = request.form.get("is_active") == "1"
+    toggle_all_saved_searches(current_user.id, is_active)
+    status = "enabled" if is_active else "paused"
+    flash(f"All alerts {status}.", "success")
+    return redirect(url_for("alerts"))
+
+
 # --- Applied Jobs / Pipeline ---
 
 @app.route("/jobs/<job_key>/applied", methods=["POST"])
-@csrf.exempt
 @login_required
 def mark_job_applied(job_key):
     data = request.get_json() or {}
@@ -616,7 +666,6 @@ def mark_job_applied(job_key):
 
 
 @app.route("/jobs/<job_key>/applied", methods=["DELETE"])
-@csrf.exempt
 @login_required
 def unmark_job_applied(job_key):
     unmark_applied(current_user.id, job_key)
@@ -624,7 +673,6 @@ def unmark_job_applied(job_key):
 
 
 @app.route("/jobs/<job_key>/stage", methods=["POST"])
-@csrf.exempt
 @login_required
 def update_job_stage(job_key):
     data = request.get_json() or {}
@@ -637,7 +685,6 @@ def update_job_stage(job_key):
 
 
 @app.route("/jobs/<job_key>/notes", methods=["POST"])
-@csrf.exempt
 @login_required
 def update_job_notes(job_key):
     data = request.get_json() or {}
@@ -658,7 +705,6 @@ def pipeline():
 # --- Bookmarks ---
 
 @app.route("/jobs/<job_key>/bookmark", methods=["POST"])
-@csrf.exempt
 @login_required
 def bookmark_job_route(job_key):
     data = request.get_json() or {}
@@ -668,7 +714,6 @@ def bookmark_job_route(job_key):
 
 
 @app.route("/jobs/<job_key>/bookmark", methods=["DELETE"])
-@csrf.exempt
 @login_required
 def unbookmark_job_route(job_key):
     unbookmark_job(current_user.id, job_key)
@@ -678,7 +723,6 @@ def unbookmark_job_route(job_key):
 # --- Dismissed Jobs ---
 
 @app.route("/jobs/<job_key>/dismiss", methods=["POST"])
-@csrf.exempt
 @login_required
 def dismiss_job_route(job_key):
     data = request.get_json() or {}
@@ -690,7 +734,6 @@ def dismiss_job_route(job_key):
 
 
 @app.route("/jobs/<job_key>/dismiss", methods=["DELETE"])
-@csrf.exempt
 @login_required
 def undismiss_job_route(job_key):
     undismiss_job(current_user.id, job_key)
@@ -727,8 +770,8 @@ def compare_jobs_view():
 # --- Cover Letter ---
 
 @app.route("/jobs/cover-letter", methods=["POST"])
-@csrf.exempt
 @login_required
+@limiter.limit("10 per minute")
 def generate_cover_letter_route():
     from services.cover_letter import generate_cover_letter
     data = request.get_json() or {}
@@ -753,8 +796,8 @@ def generate_cover_letter_route():
 # --- Screening Answers ---
 
 @app.route("/jobs/screening-answers", methods=["POST"])
-@csrf.exempt
 @login_required
+@limiter.limit("10 per minute")
 def screening_answers():
     """Generate answers to screening questions."""
     from services.screening_answerer import generate_screening_answers
@@ -782,8 +825,8 @@ def screening_answers():
 # --- Application Draft ---
 
 @app.route("/jobs/application-draft", methods=["POST"])
-@csrf.exempt
 @login_required
+@limiter.limit("10 per minute")
 def application_draft():
     """Generate an application draft."""
     from services.application_drafter import generate_application_draft
@@ -855,7 +898,6 @@ def delete_resume_route(rid):
 # --- Share Job ---
 
 @app.route("/jobs/share", methods=["POST"])
-@csrf.exempt
 @login_required
 def share_job():
     data = request.get_json() or {}
@@ -994,7 +1036,7 @@ def save_settings():
         current_user.id,
         name=request.form.get("name", ""),
         timezone=request.form.get("timezone", "UTC"),
-        max_commute_minutes=int(request.form.get("max_commute_minutes", 60)),
+        max_commute_minutes=min(_safe_int(request.form.get("max_commute_minutes"), 60), 999),
         seniority_tier=request.form.get("seniority_tier", ""),
         blocked_companies=request.form.get("blocked_companies", ""),
     )
@@ -1005,7 +1047,6 @@ def save_settings():
 # --- Notifications ---
 
 @app.route("/notifications")
-@csrf.exempt
 @login_required
 def get_notifications():
     notifs = get_unread_notifications(current_user.id)
@@ -1019,7 +1060,6 @@ def get_notifications():
 
 
 @app.route("/notifications/read", methods=["POST"])
-@csrf.exempt
 @login_required
 def read_notifications():
     data = request.get_json() or {}
@@ -1076,8 +1116,8 @@ def analytics():
 # --- Interview Prep ---
 
 @app.route("/jobs/interview-prep", methods=["POST"])
-@csrf.exempt
 @login_required
+@limiter.limit("10 per minute")
 def interview_prep():
     from services.interview_prep import generate_interview_prep
     data = request.get_json() or {}
@@ -1122,8 +1162,8 @@ def schedule_interview():
     schedule_note = f"{date} {time}".strip()
     if notes:
         schedule_note += f" - {notes}"
-    update_applied_stage(job_key, current_user.id, "interview")
-    update_applied_notes(job_key, current_user.id, schedule_note)
+    update_applied_stage(current_user.id, job_key, "interview")
+    update_applied_notes(current_user.id, job_key, schedule_note)
     flash("Interview scheduled.", "success")
     return redirect(url_for("calendar"))
 
@@ -1162,6 +1202,13 @@ def download_ics(job_key):
     end_dt = interview_dt + timedelta(hours=1)
     now = datetime.utcnow()
 
+    def _ics_escape(text):
+        """Escape text for ICS format (RFC 5545)."""
+        return text.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+    ics_title = _ics_escape(job['title'])
+    ics_company = _ics_escape(job['company'])
+
     ics = f"""BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//Job Search Tool//EN
@@ -1169,17 +1216,37 @@ BEGIN:VEVENT
 DTSTART:{interview_dt.strftime('%Y%m%dT%H%M%S')}
 DTEND:{end_dt.strftime('%Y%m%dT%H%M%S')}
 DTSTAMP:{now.strftime('%Y%m%dT%H%M%SZ')}
-SUMMARY:Interview - {job['title']} at {job['company']}
-DESCRIPTION:Interview for {job['title']} at {job['company']}
+SUMMARY:Interview - {ics_title} at {ics_company}
+DESCRIPTION:Interview for {ics_title} at {ics_company}
 END:VEVENT
 END:VCALENDAR"""
 
     return Response(
         ics,
         mimetype="text/calendar",
-        headers={"Content-Disposition": f"attachment; filename=interview_{job_key}.ics"},
+        headers={"Content-Disposition": f"attachment; filename=interview_{re.sub(r'[^a-zA-Z0-9_-]', '_', job_key)}.ics"},
     )
 
+
+
+# --- API Usage Dashboard ---
+
+@app.route("/usage")
+@login_required
+def usage():
+    days = _safe_int(request.args.get("days"), 30)
+    summary = get_api_usage_summary(user_id=current_user.id, days=days)
+    daily = get_api_usage_daily(user_id=current_user.id, days=days)
+    recent = get_api_usage_recent(user_id=current_user.id, days=days, limit=50)
+    total_cost = sum(s["total_cost"] or 0 for s in summary)
+    total_calls = sum(s["call_count"] for s in summary)
+
+    return render_template(
+        "usage.html",
+        summary=summary, daily=daily, recent=recent,
+        total_cost=total_cost, total_calls=total_calls,
+        days=days,
+    )
 
 
 # --- Startup ---
@@ -1187,6 +1254,8 @@ END:VCALENDAR"""
 with app.app_context():
     os.makedirs(os.path.dirname(Config.DB_PATH) or ".", exist_ok=True)
     init_db()
+    from database import purge_old_api_usage
+    purge_old_api_usage(days=90)
     warnings = Config.validate()
     for w in warnings:
         logger.warning(w)

@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}API Usage - JobSearch{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">API Usage &amp; Costs</h2>
+    <div class="btn-group btn-group-sm">
+        <a href="?days=7" class="btn btn-outline-secondary {{ 'active' if days == 7 }}">7 days</a>
+        <a href="?days=30" class="btn btn-outline-secondary {{ 'active' if days == 30 }}">30 days</a>
+        <a href="?days=90" class="btn btn-outline-secondary {{ 'active' if days == 90 }}">90 days</a>
+    </div>
+</div>
+
+<!-- Summary stats -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card">
+            <div class="stat-number">${{ "%.4f"|format(total_cost) }}</div>
+            <div class="stat-label">Total Cost ({{ days }}d)</div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card">
+            <div class="stat-number">{{ total_calls }}</div>
+            <div class="stat-label">API Calls</div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card">
+            {% set total_tokens = summary | sum(attribute='total_input_tokens', default=0) + summary | sum(attribute='total_output_tokens', default=0) %}
+            <div class="stat-number">{{ "{:,}".format(total_tokens | int) }}</div>
+            <div class="stat-label">Total Tokens</div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card">
+            {% set total_errors = summary | sum(attribute='error_count', default=0) %}
+            <div class="stat-number">{{ total_errors | int }}</div>
+            <div class="stat-label">Errors</div>
+        </div>
+    </div>
+</div>
+
+<!-- Cost breakdown by provider -->
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0">Cost by Provider</h5></div>
+    <div class="card-body">
+        {% if summary %}
+        {% set provider_colors = {"anthropic": "primary", "ollama": "secondary", "SerpApi": "success", "JSearch": "info", "Adzuna": "warning", "Remotive": "dark", "WeWorkRemotely": "dark"} %}
+        {% for s in summary %}
+        <div class="mb-3">
+            <div class="d-flex justify-content-between mb-1">
+                <span>
+                    <span class="badge bg-{{ provider_colors.get(s.provider, 'secondary') }} me-1">{{ s.provider }}</span>
+                    {{ s.call_count }} calls
+                    {% if s.total_input_tokens %}
+                    &middot; {{ "{:,}".format((s.total_input_tokens or 0) | int) }} in / {{ "{:,}".format((s.total_output_tokens or 0) | int) }} out tokens
+                    {% endif %}
+                </span>
+                <span class="fw-bold">${{ "%.4f"|format(s.total_cost or 0) }}</span>
+            </div>
+            <div class="progress" style="height: 20px;">
+                {% set pct = (s.total_cost / total_cost * 100) if total_cost > 0 else 0 %}
+                <div class="progress-bar bg-{{ provider_colors.get(s.provider, 'secondary') }}"
+                     style="width: {{ pct | round(1) }}%">
+                    {% if pct > 10 %}{{ "%.1f"|format(pct) }}%{% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p class="text-muted mb-0">No API usage recorded yet. Start searching to see data here.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Daily usage trend -->
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0">Daily Usage</h5></div>
+    <div class="card-body">
+        {% if daily %}
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Calls</th>
+                        <th>Cost</th>
+                        <th>Tokens</th>
+                        <th>Activity</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set max_cost = daily | map(attribute='total_cost') | max %}
+                    {% for d in daily | reverse %}
+                    <tr>
+                        <td>{{ d.date }}</td>
+                        <td>{{ d.call_count }}</td>
+                        <td>${{ "%.4f"|format(d.total_cost or 0) }}</td>
+                        <td>{{ "{:,}".format((d.total_tokens or 0) | int) }}</td>
+                        <td style="width: 40%;">
+                            <div class="bg-primary rounded" style="height: 16px; width: {{ ((d.total_cost or 0) / max_cost * 100) if max_cost > 0 else 0 }}%;"></div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">No daily data available yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Cost by endpoint -->
+<div class="row mb-4">
+    <div class="col-md-6 mb-3">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="mb-0">Pricing Reference</h5></div>
+            <div class="card-body">
+                <table class="table table-sm mb-0">
+                    <thead><tr><th>Provider / Model</th><th>Cost</th></tr></thead>
+                    <tbody>
+                        <tr><td>Claude Haiku 4.5</td><td>$0.80 / $4.00 per MTok (in/out)</td></tr>
+                        <tr><td>Claude Sonnet 4</td><td>$3.00 / $15.00 per MTok (in/out)</td></tr>
+                        <tr><td>SerpApi</td><td>~$0.01 per search</td></tr>
+                        <tr><td>JSearch (RapidAPI)</td><td>~$0.005 per search</td></tr>
+                        <tr><td>Adzuna</td><td>Free tier</td></tr>
+                        <tr><td>Remotive</td><td>Free</td></tr>
+                        <tr><td>We Work Remotely</td><td>Free</td></tr>
+                        <tr><td>Ollama (local)</td><td>Free</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-3">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="mb-0">Cost by Feature</h5></div>
+            <div class="card-body">
+                {% if summary %}
+                {% set ai_summary = summary | selectattr('provider', 'equalto', 'anthropic') | list %}
+                {% if ai_summary %}
+                <p class="small text-muted mb-2">Anthropic API calls by feature:</p>
+                <ul class="list-unstyled mb-0">
+                    {% for s in summary %}
+                    {% if s.provider == 'anthropic' %}
+                    <li class="d-flex justify-content-between py-1 border-bottom">
+                        <span>{{ s.call_count }} AI calls</span>
+                        <span class="text-muted">avg {{ "%.0f"|format(s.avg_response_ms or 0) }}ms</span>
+                    </li>
+                    {% endif %}
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted mb-0">No AI calls recorded yet.</p>
+                {% endif %}
+                {% else %}
+                <p class="text-muted mb-0">No data available.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent API calls log -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">Recent API Calls</h5>
+    </div>
+    <div class="card-body p-0">
+        {% if recent %}
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Provider</th>
+                        <th>Endpoint</th>
+                        <th>Model</th>
+                        <th>Tokens</th>
+                        <th>Cost</th>
+                        <th>Time (ms)</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in recent %}
+                    <tr class="{{ 'table-danger' if not r.success }}">
+                        <td class="small text-nowrap">{{ r.created_at[:16] }}</td>
+                        <td><span class="badge bg-{{ provider_colors.get(r.provider, 'secondary') }}">{{ r.provider }}</span></td>
+                        <td class="small">{{ r.endpoint }}</td>
+                        <td class="small text-muted">{{ r.model or '-' }}</td>
+                        <td class="small">
+                            {% if r.tokens_input or r.tokens_output %}
+                            {{ "{:,}".format(r.tokens_input or 0) }} / {{ "{:,}".format(r.tokens_output or 0) }}
+                            {% else %}-{% endif %}
+                        </td>
+                        <td class="small">${{ "%.4f"|format(r.estimated_cost_usd or 0) }}</td>
+                        <td class="small">{{ r.response_time_ms or 0 }}</td>
+                        <td>
+                            {% if r.success %}
+                            <span class="badge bg-success">OK</span>
+                            {% else %}
+                            <span class="badge bg-danger" title="{{ r.error_message or '' }}">ERR</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-3">
+            <p class="text-muted mb-0">No API calls recorded yet. Usage will appear here as you search and use AI features.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
