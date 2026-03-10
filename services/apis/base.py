@@ -33,9 +33,10 @@ class JobAPIProvider(ABC):
 
     @abstractmethod
     def search(self, query: str, location: str, remote_only: bool,
-               date_posted: str, page: int) -> list[dict]:
+               date_posted: str, page: int, employment_type: str = "") -> list[dict]:
         """Search for jobs. Return a list of normalized job dicts.
-        Use self.normalize() to convert raw API data into the standard schema."""
+        Use self.normalize() to convert raw API data into the standard schema.
+        employment_type: '', 'fulltime', 'parttime', 'contract', 'internship'"""
         ...
 
     def normalize(self, raw: dict) -> dict:
@@ -52,6 +53,7 @@ class JobAPIProvider(ABC):
             "salary_min": raw.get("salary_min"),
             "salary_max": raw.get("salary_max"),
             "posted_date": raw.get("posted_date", ""),
+            "employment_type": raw.get("employment_type", ""),
             "source": self.name,
             "job_key": self._make_key(title, company),
         }

@@ -61,9 +61,9 @@ class APIError(Exception):
     pass
 
 
-def search_all(query, location, remote_only=False, date_posted="month", page=1):
+def search_all(query, location, remote_only=False, date_posted="month", page=1, employment_type=""):
     """Search all configured job APIs and return unified results."""
-    cache_key = _cache_key(query, location, remote_only, date_posted, page)
+    cache_key = _cache_key(query, location, remote_only, date_posted, page, employment_type)
     cached = _cache.get(cache_key)
     if cached is not None:
         logger.info("Cache hit for query=%s (cache size: %d)", query, _cache.size)
@@ -78,7 +78,7 @@ def search_all(query, location, remote_only=False, date_posted="month", page=1):
     futures = {}
     for provider in providers:
         future = _executor.submit(
-            provider.search, query, location, remote_only, date_posted, page,
+            provider.search, query, location, remote_only, date_posted, page, employment_type,
         )
         futures[future] = provider.name
 
@@ -111,6 +111,12 @@ def search_all(query, location, remote_only=False, date_posted="month", page=1):
             seen_keys.add(job["job_key"])
             unique_results.append(job)
     all_results = unique_results
+
+    # Post-filter by employment type for providers that don't support native filtering
+    if employment_type:
+        filtered = [j for j in all_results if not j.get("employment_type") or j["employment_type"] == employment_type]
+        logger.info("Employment type filter '%s': %d -> %d results", employment_type, len(all_results), len(filtered))
+        all_results = filtered
 
     _cache.set(cache_key, all_results)
     logger.info("Total results after dedup: %d (cache size: %d)", len(all_results), _cache.size)

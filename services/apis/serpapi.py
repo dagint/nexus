@@ -15,9 +15,16 @@ class SerpApiProvider(JobAPIProvider):
     def is_available(self):
         return bool(Config.SERPAPI_KEY)
 
+    EMPLOYMENT_TYPE_MAP = {
+        "fulltime": "full_time",
+        "parttime": "part_time",
+        "contract": "contractor",
+        "internship": "internship",
+    }
+
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10),
            retry=retry_if_exception_type((requests.exceptions.ConnectionError, requests.exceptions.Timeout, APIError)))
-    def search(self, query, location, remote_only, date_posted, page):
+    def search(self, query, location, remote_only, date_posted, page, employment_type=""):
         params = {
             "engine": "google_jobs",
             "q": query,
@@ -28,11 +35,16 @@ class SerpApiProvider(JobAPIProvider):
         if remote_only:
             params["ltype"] = "1"  # Work from home filter
 
-        # Date posted mapping
+        # Build chips parameter (can combine multiple with ;)
+        chips_parts = []
         date_map = {"today": "today", "3days": "3days", "week": "week", "month": "month"}
         chips_date = date_map.get(date_posted)
         if chips_date:
-            params["chips"] = f"date_posted:{chips_date}"
+            chips_parts.append(f"date_posted:{chips_date}")
+        if employment_type and employment_type in self.EMPLOYMENT_TYPE_MAP:
+            chips_parts.append(f"employment_type:{self.EMPLOYMENT_TYPE_MAP[employment_type]}")
+        if chips_parts:
+            params["chips"] = ",".join(chips_parts)
 
         # Pagination — SerpApi uses next_page_token, but for simplicity
         # we skip pagination beyond page 1 (API returns ~10 results per page)
@@ -94,6 +106,18 @@ class SerpApiProvider(JobAPIProvider):
             if posted_at:
                 posted_date = posted_at  # e.g., "3 days ago"
 
+            # Extract employment type from extensions
+            emp_type = ""
+            schedule = extensions.get("schedule_type", "").lower()
+            if "full" in schedule:
+                emp_type = "fulltime"
+            elif "part" in schedule:
+                emp_type = "parttime"
+            elif "contract" in schedule or "temp" in schedule:
+                emp_type = "contract"
+            elif "intern" in schedule:
+                emp_type = "internship"
+
             results.append(self.normalize({
                 "title": item.get("title", ""),
                 "company": item.get("company_name", ""),
@@ -104,6 +128,7 @@ class SerpApiProvider(JobAPIProvider):
                 "salary_min": salary_min,
                 "salary_max": salary_max,
                 "posted_date": posted_date,
+                "employment_type": emp_type,
             }))
 
         return results

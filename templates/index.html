@@ -101,7 +101,7 @@
                     </div>
 
                     <div class="row">
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label for="date_posted" class="form-label">Date Posted</label>
                             <select class="form-select" id="date_posted" name="date_posted">
                                 <option value="all">Any time</option>
@@ -111,13 +111,23 @@
                                 <option value="month" selected>Last month</option>
                             </select>
                         </div>
-                        <div class="col-md-4 mb-3 d-flex align-items-end">
+                        <div class="col-md-3 mb-3">
+                            <label for="employment_type" class="form-label">Employment Type</label>
+                            <select class="form-select" id="employment_type" name="employment_type">
+                                <option value="">Any type</option>
+                                <option value="fulltime">Full-time</option>
+                                <option value="parttime">Part-time</option>
+                                <option value="contract">Contract</option>
+                                <option value="internship">Internship</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 mb-3 d-flex align-items-end">
                             <div class="form-check">
                                 <input type="checkbox" class="form-check-input" id="remote_only" name="remote_only">
                                 <label class="form-check-label" for="remote_only">Remote only</label>
                             </div>
                         </div>
-                        <div class="col-md-4 mb-3 d-flex align-items-end">
+                        <div class="col-md-3 mb-3 d-flex align-items-end">
                             <div class="form-check">
                                 <input type="checkbox" class="form-check-input" id="use_ai" name="use_ai" checked>
                                 <label class="form-check-label" for="use_ai">AI-powered matching</label>

@@ -17,7 +17,7 @@ class AdzunaProvider(JobAPIProvider):
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10),
            retry=retry_if_exception_type((requests.exceptions.ConnectionError, requests.exceptions.Timeout, APIError)))
-    def search(self, query, location, remote_only, date_posted, page):
+    def search(self, query, location, remote_only, date_posted, page, employment_type=""):
         search_query = query
         if remote_only:
             search_query += " remote"
