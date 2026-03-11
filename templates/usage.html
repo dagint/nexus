@@ -28,14 +28,14 @@
     </div>
     <div class="col-md-3 mb-3">
         <div class="card stat-card">
-            {% set total_tokens = summary | sum(attribute='total_input_tokens', default=0) + summary | sum(attribute='total_output_tokens', default=0) %}
+            {% set total_tokens = (summary | sum(attribute='total_input_tokens')) + (summary | sum(attribute='total_output_tokens')) %}
             <div class="stat-number">{{ "{:,}".format(total_tokens | int) }}</div>
             <div class="stat-label">Total Tokens</div>
         </div>
     </div>
     <div class="col-md-3 mb-3">
         <div class="card stat-card">
-            {% set total_errors = summary | sum(attribute='error_count', default=0) %}
+            {% set total_errors = summary | sum(attribute='error_count') %}
             <div class="stat-number">{{ total_errors | int }}</div>
             <div class="stat-label">Errors</div>
         </div>
