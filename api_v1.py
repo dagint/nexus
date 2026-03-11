@@ -16,9 +16,11 @@ logger = logging.getLogger(__name__)
 
 api_v1 = Blueprint("api_v1", __name__, url_prefix="/api/v1")
 
-# Simple in-memory rate limiter for API tokens
+# Simple in-memory rate limiter for API tokens.
+# Note: per-worker store — with N gunicorn workers the effective limit is ~N × RATE_LIMIT.
+# For stricter enforcement, replace with a shared backend (e.g. Redis).
 _rate_limit_store = defaultdict(list)
-RATE_LIMIT = 30  # requests per minute
+RATE_LIMIT = 30  # requests per minute per worker
 
 
 def _check_rate_limit(token_key):

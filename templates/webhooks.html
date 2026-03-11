@@ -13,7 +13,7 @@
                 <h5 class="mb-0">Add Webhook</h5>
             </div>
             <div class="card-body">
-                <form method="POST" action="{{ url_for('webhooks_settings') }}">
+                <form method="POST" action="{{ url_for('settings.webhooks_settings') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                     <div class="mb-3">
@@ -71,11 +71,11 @@
                             </small>
                         </div>
                         <div class="d-flex gap-2">
-                            <form method="POST" action="{{ url_for('webhook_test', wid=wh.id) }}" class="d-inline">
+                            <form method="POST" action="{{ url_for('settings.webhook_test', wid=wh.id) }}" class="d-inline">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn-sm btn-outline-primary">Test</button>
                             </form>
-                            <form method="POST" action="{{ url_for('webhook_delete', wid=wh.id) }}" class="d-inline">
+                            <form method="POST" action="{{ url_for('settings.webhook_delete', wid=wh.id) }}" class="d-inline">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn-sm btn-outline-danger"
                                         onclick="return confirm('Delete this webhook?')">Delete</button>

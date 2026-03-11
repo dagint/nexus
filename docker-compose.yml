@@ -1,13 +1,26 @@
 services:
   nexus:
     build: .
+    image: dagint/nexus:latest
     ports:
       - "5000:5000"
     env_file:
       - .env
     volumes:
       - job_data:/app/data/db
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 512M
 
 volumes:
   job_data:

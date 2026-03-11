@@ -13,7 +13,7 @@
                 <h5 class="mb-0">Authentication</h5>
             </div>
             <div class="card-body">
-                <p>All API endpoints require token authentication. Generate a token in <a href="{{ url_for('settings') }}">Settings</a>.</p>
+                <p>All API endpoints require token authentication. Generate a token in <a href="{{ url_for('settings.settings') }}">Settings</a>.</p>
                 <p>Include the token in the <code>X-API-Token</code> header:</p>
                 <pre class="bg-body-secondary p-3 rounded"><code>curl -H "X-API-Token: YOUR_TOKEN" {{ request.host_url }}api/v1/pipeline</code></pre>
                 <p class="text-muted small mb-0">Alternatively, use <code>Authorization: Bearer YOUR_TOKEN</code>.</p>

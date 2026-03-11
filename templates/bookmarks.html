@@ -47,7 +47,7 @@
             {% if job.apply_url %}
             <a href="{{ job.apply_url }}" target="_blank" class="btn btn-sm btn-primary">Apply</a>
             {% endif %}
-            <a href="{{ url_for('job_detail', job_key=job.job_key) }}" class="btn btn-sm btn-outline-info">View Details</a>
+            <a href="{{ url_for('jobs.job_detail', job_key=job.job_key) }}" class="btn btn-sm btn-outline-info">View Details</a>
             {% if job.job_key not in applied_keys %}
             <button class="btn btn-sm btn-outline-success apply-from-bookmark" data-job-key="{{ job.job_key }}"
                     data-title="{{ job.title }}" data-company="{{ job.company }}">Mark Applied</button>
@@ -71,7 +71,7 @@
                 <h5 class="modal-title">Import Jobs from CSV</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form method="POST" action="{{ url_for('import_csv_route') }}" enctype="multipart/form-data">
+            <form method="POST" action="{{ url_for('jobs.import_csv_route') }}" enctype="multipart/form-data">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <p class="text-muted small">Upload a CSV file with job listings. Required column: <code>title</code>. Optional columns: <code>company</code>, <code>location</code>, <code>apply_url</code>, <code>salary_min</code>, <code>salary_max</code>, <code>description</code>, <code>remote_status</code>, <code>source</code>.</p>

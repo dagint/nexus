@@ -10,7 +10,7 @@
                 <h2 class="mb-0">{{ team.name }}</h2>
                 <small class="text-muted">{{ members|length }} member{{ 's' if members|length != 1 }}</small>
             </div>
-            <a href="{{ url_for('teams_list') }}" class="btn btn-outline-secondary btn-sm">Back to Teams</a>
+            <a href="{{ url_for('teams.teams_list') }}" class="btn btn-outline-secondary btn-sm">Back to Teams</a>
         </div>
 
         <!-- Shared Jobs -->
@@ -123,7 +123,7 @@
                 <h5 class="mb-0">Invite Member</h5>
             </div>
             <div class="card-body">
-                <form method="POST" action="{{ url_for('team_invite', tid=team.id) }}">
+                <form method="POST" action="{{ url_for('teams.team_invite', tid=team.id) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-3">
                         <input type="email" class="form-control" name="email"
@@ -189,9 +189,9 @@ document.addEventListener("DOMContentLoaded", function() {
                         var html = "";
                         data.comments.forEach(function(c) {
                             html += '<div class="mb-2"><strong class="small">' +
-                                    (c.name || c.email) + '</strong> ' +
-                                    '<small class="text-muted">' + (c.created_at || '').substring(0, 16) + '</small>' +
-                                    '<p class="small mb-0">' + c.comment + '</p></div>';
+                                    escapeHtml(c.name || c.email) + '</strong> ' +
+                                    '<small class="text-muted">' + escapeHtml((c.created_at || '').substring(0, 16)) + '</small>' +
+                                    '<p class="small mb-0">' + escapeHtml(c.comment) + '</p></div>';
                         });
                         list.innerHTML = html;
                     });

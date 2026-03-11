@@ -6,7 +6,7 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2>Application Pipeline</h2>
     <div>
-        <a href="{{ url_for('kanban') }}" class="btn btn-outline-primary btn-sm">Kanban View</a>
+        <a href="{{ url_for('pipeline.kanban') }}" class="btn btn-outline-primary btn-sm">Kanban View</a>
         <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">Dashboard</a>
     </div>
 </div>
@@ -14,14 +14,14 @@
 <!-- Stage filter tabs -->
 <ul class="nav nav-pills mb-4">
     <li class="nav-item">
-        <a class="nav-link {{ 'active' if not current_stage }}" href="{{ url_for('pipeline') }}">
+        <a class="nav-link {{ 'active' if not current_stage }}" href="{{ url_for('pipeline.pipeline') }}">
             All ({{ jobs|length }})
         </a>
     </li>
     {% for stage in stages %}
     {% set count = stats.get(stage, 0) %}
     <li class="nav-item">
-        <a class="nav-link {{ 'active' if current_stage == stage }}" href="{{ url_for('pipeline', stage=stage) }}">
+        <a class="nav-link {{ 'active' if current_stage == stage }}" href="{{ url_for('pipeline.pipeline', stage=stage) }}">
             {{ stage|capitalize }} ({{ count }})
         </a>
     </li>
@@ -220,10 +220,10 @@ function loadContacts(container, jobKey) {
             data.contacts.forEach(function(c) {
                 var tr = document.createElement('tr');
                 tr.innerHTML =
-                    '<td>' + (c.name || '') + '</td>' +
-                    '<td>' + (c.email ? '<a href="mailto:' + c.email + '">' + c.email + '</a>' : '') + '</td>' +
-                    '<td>' + (c.role || '') + '</td>' +
-                    '<td><button class="btn btn-sm btn-outline-danger delete-contact" data-cid="' + c.id + '" data-job-key="' + jobKey + '">X</button></td>';
+                    '<td>' + escapeHtml(c.name || '') + '</td>' +
+                    '<td>' + (c.email ? '<a href="mailto:' + escapeHtml(c.email) + '">' + escapeHtml(c.email) + '</a>' : '') + '</td>' +
+                    '<td>' + escapeHtml(c.role || '') + '</td>' +
+                    '<td><button class="btn btn-sm btn-outline-danger delete-contact" data-cid="' + c.id + '" data-job-key="' + escapeHtml(jobKey) + '">X</button></td>';
                 tbody.appendChild(tr);
             });
             // Attach delete handlers

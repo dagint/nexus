@@ -76,21 +76,8 @@ def _heuristic_tailor(resume_text, job_title, company, job_description):
 
     # Extract keywords from job description (simple word frequency)
     import re as _re
-    stop_words = {
-        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-        "have", "has", "had", "do", "does", "did", "will", "would", "could",
-        "should", "may", "might", "shall", "can", "need", "dare", "ought",
-        "and", "or", "but", "if", "while", "although", "because", "since",
-        "for", "with", "about", "against", "between", "through", "during",
-        "before", "after", "above", "below", "to", "from", "up", "down",
-        "in", "out", "on", "off", "over", "under", "again", "further",
-        "then", "once", "here", "there", "when", "where", "why", "how",
-        "all", "both", "each", "few", "more", "most", "other", "some",
-        "such", "no", "not", "only", "own", "same", "so", "than", "too",
-        "very", "just", "don", "now", "our", "you", "your", "we", "they",
-        "this", "that", "these", "those", "of", "at", "by", "as", "it",
-        "its", "also", "work", "working", "must", "including", "etc",
-    }
+    from services.constants import STOP_WORDS
+    stop_words = STOP_WORDS | {"work", "working", "including", "etc", "don", "now", "down"}
 
     # Get meaningful words from job description
     desc_words = _re.findall(r"\b[a-z]{3,}\b", desc_lower)

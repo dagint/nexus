@@ -9,7 +9,7 @@
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">Upcoming Interviews</h5>
-        <a href="{{ url_for('pipeline') }}" class="btn btn-sm btn-outline-primary">View Pipeline</a>
+        <a href="{{ url_for('pipeline.pipeline') }}" class="btn btn-sm btn-outline-primary">View Pipeline</a>
     </div>
     <div class="card-body">
         {% if interviews %}
@@ -32,7 +32,7 @@
                             <small class="text-muted">{{ interview.notes or 'No notes' }}</small>
                         </td>
                         <td>
-                            <a href="{{ url_for('download_ics', job_key=interview.job_key) }}"
+                            <a href="{{ url_for('pipeline.download_ics', job_key=interview.job_key) }}"
                                class="btn btn-sm btn-outline-primary">Download .ics</a>
                         </td>
                     </tr>
@@ -44,7 +44,7 @@
         <div class="empty-state">
             <h5>No upcoming interviews</h5>
             <p>Move jobs to the "Interview" stage in your pipeline to see them here.</p>
-            <a href="{{ url_for('pipeline') }}" class="btn btn-sm btn-outline-primary">Go to Pipeline</a>
+            <a href="{{ url_for('pipeline.pipeline') }}" class="btn btn-sm btn-outline-primary">Go to Pipeline</a>
         </div>
         {% endif %}
     </div>
@@ -55,7 +55,7 @@
     <div class="card-header"><h5 class="mb-0">Schedule Interview</h5></div>
     <div class="card-body">
         {% if all_applied_jobs %}
-        <form method="POST" action="{{ url_for('schedule_interview') }}">
+        <form method="POST" action="{{ url_for('pipeline.schedule_interview') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="row g-3">
                 <div class="col-md-6">

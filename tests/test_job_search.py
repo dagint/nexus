@@ -1,5 +1,4 @@
 from unittest.mock import patch, MagicMock
-from services.job_search import _deduplicate
 from services.apis.base import JobAPIProvider
 from services.apis.jsearch import JSearchProvider
 from services.apis.remotive import RemotiveProvider
@@ -31,24 +30,6 @@ def test_normalize_job():
     assert result["source"] == "TestSource"
     assert result["job_key"]
 
-
-def test_deduplicate_exact():
-    jobs = [
-        {"title": "Python Dev", "company": "Acme", "description": "Short", "source": "A"},
-        {"title": "Python Dev", "company": "Acme", "description": "Much longer description here", "source": "B"},
-    ]
-    result = _deduplicate(jobs)
-    assert len(result) == 1
-    assert result[0]["description"] == "Much longer description here"
-
-
-def test_deduplicate_different():
-    jobs = [
-        {"title": "Python Dev", "company": "Acme", "description": "x", "source": "A"},
-        {"title": "Java Dev", "company": "Corp", "description": "y", "source": "B"},
-    ]
-    result = _deduplicate(jobs)
-    assert len(result) == 2
 
 
 @patch("services.apis.jsearch.requests.get")

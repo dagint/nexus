@@ -10,7 +10,7 @@
 
         {% if not parsed %}
         <!-- Step 1: Paste email -->
-        <form method="POST" action="{{ url_for('import_email') }}">
+        <form method="POST" action="{{ url_for('jobs.import_email') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="step" value="parse">
 
@@ -22,7 +22,7 @@
             </div>
 
             <button type="submit" class="btn btn-primary">Extract Information</button>
-            <a href="{{ url_for('pipeline') }}" class="btn btn-outline-secondary ms-2">Cancel</a>
+            <a href="{{ url_for('pipeline.pipeline') }}" class="btn btn-outline-secondary ms-2">Cancel</a>
         </form>
         {% else %}
         <!-- Step 2: Review and confirm -->
@@ -31,7 +31,7 @@
                 <h5 class="mb-0">Extracted Information</h5>
             </div>
             <div class="card-body">
-                <form method="POST" action="{{ url_for('import_email') }}">
+                <form method="POST" action="{{ url_for('jobs.import_email') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="step" value="confirm">
                     <input type="hidden" name="email_text" value="{{ email_text or '' }}">
@@ -109,7 +109,7 @@ Deadline: {{ parsed.deadline }}{% endif %}</textarea>
                     </div>
 
                     <button type="submit" class="btn btn-primary">Import to Pipeline</button>
-                    <a href="{{ url_for('import_email') }}" class="btn btn-outline-secondary ms-2">Start Over</a>
+                    <a href="{{ url_for('jobs.import_email') }}" class="btn btn-outline-secondary ms-2">Start Over</a>
                 </form>
             </div>
         </div>
