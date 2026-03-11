@@ -468,9 +468,42 @@ def init_db():
     _migrate_add_column(conn, "users", "weekly_report_enabled", "INTEGER DEFAULT 1")
 
     seed_search_templates(conn)
+    bootstrap_admin(conn)
 
     _safe_close(conn)
     logger.info("Database initialized at %s", Config.DB_PATH)
+
+
+def bootstrap_admin(conn=None):
+    """Create or promote the admin user from ADMIN_EMAIL / ADMIN_PASSWORD env vars."""
+    admin_email = Config.ADMIN_EMAIL
+    if not admin_email:
+        return
+    admin_email = admin_email.lower().strip()
+    own_conn = conn is None
+    if own_conn:
+        conn = get_db()
+
+    row = conn.execute("SELECT id, is_admin FROM users WHERE email = ?", (admin_email,)).fetchone()
+    if row:
+        if not row["is_admin"]:
+            conn.execute("UPDATE users SET is_admin = 1 WHERE id = ?", (row["id"],))
+            conn.commit()
+            logger.info("Promoted existing user %s to admin", admin_email)
+    else:
+        admin_password = Config.ADMIN_PASSWORD
+        if not admin_password:
+            logger.warning("ADMIN_EMAIL is set but ADMIN_PASSWORD is not — cannot create admin account")
+        else:
+            conn.execute(
+                "INSERT INTO users (email, password_hash, name, is_admin) VALUES (?, ?, ?, 1)",
+                (admin_email, generate_password_hash(admin_password), "Admin"),
+            )
+            conn.commit()
+            logger.info("Created admin account for %s", admin_email)
+
+    if own_conn:
+        _safe_close(conn)
 
 
 def _migrate_add_column(conn, table, column, col_type):
