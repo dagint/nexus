@@ -39,6 +39,9 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.config.from_object(Config)
 
+from flask_compress import Compress
+Compress(app)
+
 from database import close_db
 app.teardown_appcontext(close_db)
 
@@ -115,6 +118,10 @@ def set_security_headers(response):
         "form-action 'self'; "
         "frame-ancestors 'none';"
     )
+
+    # Cache static assets for 1 hour (CSS, JS, images, fonts)
+    if request.path.startswith("/static"):
+        response.headers["Cache-Control"] = "public, max-age=3600"
 
     # Record metrics (skip /static and /metrics)
     try:
