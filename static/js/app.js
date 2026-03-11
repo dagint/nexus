@@ -68,6 +68,7 @@ document.addEventListener("DOMContentLoaded", function () {
             if (cb.checked) activeSources.add(cb.dataset.source);
         });
 
+        var visibleCount = 0;
         cards.forEach(function (card) {
             let show = true;
 
@@ -80,7 +81,19 @@ document.addEventListener("DOMContentLoaded", function () {
             if (!activeSources.has(card.dataset.source)) show = false;
 
             card.classList.toggle("hidden", !show);
+            if (show) visibleCount++;
         });
+
+        var anyFilterActive = remoteOnly || hideTravel || hideStaffing || hideStale || hideApplied || hideDismissed || activeSources.size < sourceChecks.length;
+        var countEl = document.getElementById("resultsCount");
+        if (countEl) {
+            var total = countEl.dataset.total;
+            countEl.textContent = anyFilterActive ? visibleCount + " of " + total + " results" : total + " results";
+        }
+        var paginationNav = document.getElementById("paginationNav");
+        if (paginationNav) {
+            paginationNav.classList.toggle("d-none", visibleCount <= cards.length && anyFilterActive);
+        }
     }
 
     filterChecks.forEach(function (cb) {
