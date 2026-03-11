@@ -3,6 +3,8 @@ import os
 import sys
 from dotenv import load_dotenv
 
+VERSION = "1.0.0"
+
 load_dotenv()
 
 _logger = logging.getLogger(__name__)
