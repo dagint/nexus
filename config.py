@@ -57,6 +57,10 @@ class Config:
     GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
     GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:5000/auth/google/callback")
 
+    # Admin bootstrap
+    ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "")
+    ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
+
     # Database
     DB_PATH = os.getenv("DB_PATH", os.path.join("data", "db", "jobs.db"))
 
