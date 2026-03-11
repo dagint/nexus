@@ -136,7 +136,8 @@ def set_security_headers(response):
 
 @app.context_processor
 def inject_notification_count():
-    ctx = {"config": Config}
+    from config import VERSION
+    ctx = {"config": Config, "version": VERSION}
     if current_user.is_authenticated:
         ctx["notification_count"] = get_unread_count(current_user.id)
     else:
