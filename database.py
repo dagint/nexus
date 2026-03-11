@@ -1228,10 +1228,10 @@ def get_api_usage_summary(user_id=None, days=30):
     rows = conn.execute(
         f"""SELECT provider,
                    COUNT(*) as call_count,
-                   SUM(tokens_input) as total_input_tokens,
-                   SUM(tokens_output) as total_output_tokens,
-                   SUM(estimated_cost_usd) as total_cost,
-                   AVG(response_time_ms) as avg_response_ms,
+                   COALESCE(SUM(tokens_input), 0) as total_input_tokens,
+                   COALESCE(SUM(tokens_output), 0) as total_output_tokens,
+                   COALESCE(SUM(estimated_cost_usd), 0) as total_cost,
+                   COALESCE(AVG(response_time_ms), 0) as avg_response_ms,
                    SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as error_count
             FROM api_usage {where}
             GROUP BY provider ORDER BY total_cost DESC""",
@@ -1248,8 +1248,8 @@ def get_api_usage_daily(user_id=None, days=30):
     rows = conn.execute(
         f"""SELECT DATE(created_at) as date,
                    COUNT(*) as call_count,
-                   SUM(estimated_cost_usd) as total_cost,
-                   SUM(tokens_input + tokens_output) as total_tokens
+                   COALESCE(SUM(estimated_cost_usd), 0) as total_cost,
+                   COALESCE(SUM(COALESCE(tokens_input, 0) + COALESCE(tokens_output, 0)), 0) as total_tokens
             FROM api_usage {where}
             GROUP BY DATE(created_at) ORDER BY date""",
         params,
