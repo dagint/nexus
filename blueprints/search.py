@@ -17,11 +17,16 @@ from database import (
     get_role_velocities_batch,
 )
 
+import time as _time
+
 from services.constants import RESULTS_PER_PAGE, safe_int as _safe_int
 
 logger = logging.getLogger(__name__)
 
 search_bp = Blueprint("search", __name__)
+
+_pref_cache = {}  # {user_id: (profile, timestamp)}
+_PREF_CACHE_TTL = 60  # seconds
 
 
 def init_search_limiter(limiter):
@@ -206,10 +211,15 @@ def search():
     if resume_data:
         if current_user.is_authenticated:
             user_prefs = user_settings
-            # Build preference profile from bookmarked/applied/dismissed jobs
+            # Build preference profile (cached 60s per user)
             try:
-                from services.preference_learner import build_preference_profile
-                preference_profile = build_preference_profile(current_user.id)
+                cached = _pref_cache.get(current_user.id)
+                if cached and _time.time() - cached[1] < _PREF_CACHE_TTL:
+                    preference_profile = cached[0]
+                else:
+                    from services.preference_learner import build_preference_profile
+                    preference_profile = build_preference_profile(current_user.id)
+                    _pref_cache[current_user.id] = (preference_profile, _time.time())
             except Exception as e:
                 logger.warning("Preference learning failed: %s", e)
         if remote_only:

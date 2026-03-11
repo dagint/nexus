@@ -10,6 +10,8 @@ _role_aliases = None
 _MAX_CLAUDE_TITLE_CALLS = 10
 _claude_title_call_count = 0
 _title_call_lock = threading.Lock()
+_title_match_cache = {}
+_title_cache_lock = threading.Lock()
 
 
 def _load_role_aliases():
@@ -273,7 +275,12 @@ def _score_title(job, resume_data):
 
 
 def _claude_title_match(job_title, resume_titles):
-    """Use Claude to assess title relevance for ambiguous cases."""
+    """Use Claude to assess title relevance for ambiguous cases. Results are cached."""
+    cache_key = (job_title, tuple(sorted(t.lower() for t in resume_titles[:5])))
+    with _title_cache_lock:
+        if cache_key in _title_match_cache:
+            return _title_match_cache[cache_key]
+
     global _claude_title_call_count
     with _title_call_lock:
         if _claude_title_call_count >= _MAX_CLAUDE_TITLE_CALLS:
@@ -292,6 +299,7 @@ Job title: {job_title}
 Candidate titles: {', '.join(resume_titles[:5])}"""
 
     response_text = call(prompt, model="claude-haiku-4-5-20251001", max_tokens=100, endpoint="title_match")
+    result_val = None
     if response_text:
         try:
             json_match = re.search(r"\{[\s\S]*?\}", response_text)
@@ -300,11 +308,13 @@ Candidate titles: {', '.join(resume_titles[:5])}"""
                 score = min(int(result.get("score", 0)), 30)
                 reason = result.get("reason", "AI-assessed title match")
                 if score >= 10:
-                    return score, [reason]
+                    result_val = score, [reason]
         except (json.JSONDecodeError, ValueError) as e:
             logger.warning("Failed to parse Claude title match response: %s", e)
 
-    return None
+    with _title_cache_lock:
+        _title_match_cache[cache_key] = result_val
+    return result_val
 
 
 def _score_seniority(job, resume_data):

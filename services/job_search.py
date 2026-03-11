@@ -53,7 +53,7 @@ class _LRUCache:
 
 
 _cache = _LRUCache()
-_executor = ThreadPoolExecutor(max_workers=5)
+_executor = ThreadPoolExecutor(max_workers=10)
 
 
 class APIError(Exception):
