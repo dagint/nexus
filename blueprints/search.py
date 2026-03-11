@@ -56,7 +56,7 @@ def search():
         # Check for saved resume
         saved_resume_id = request.form.get("saved_resume_id", "")
         if saved_resume_id and current_user.is_authenticated:
-            saved = get_resume(int(saved_resume_id), current_user.id)
+            saved = get_resume(_safe_int(saved_resume_id), current_user.id)
             if saved:
                 resume_text = saved["raw_text"]
                 resume_id = saved["id"]
@@ -314,10 +314,7 @@ def search():
         add_search_history_with_salary(current_user.id, query, location, remote_only, resume_id, len(jobs), avg_salary)
 
     # Pagination
-    try:
-        page = int(request.args.get("page", request.form.get("page", 1)))
-    except (ValueError, TypeError):
-        page = 1
+    page = _safe_int(request.args.get("page", request.form.get("page", 1)), 1)
     total_jobs = len(jobs)
     total_pages = max(1, (total_jobs + RESULTS_PER_PAGE - 1) // RESULTS_PER_PAGE)
     page = max(1, min(page, total_pages))

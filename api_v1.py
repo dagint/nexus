@@ -87,7 +87,8 @@ def api_search_jobs():
 
     location = request.args.get("location", "")
     remote_only = request.args.get("remote_only", "false").lower() in ("true", "1")
-    page = max(1, int(request.args.get("page", 1)))
+    from services.constants import safe_int as _safe_int
+    page = max(1, _safe_int(request.args.get("page", 1), 1))
 
     try:
         from services.job_search import search_all

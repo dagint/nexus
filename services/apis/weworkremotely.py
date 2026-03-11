@@ -25,7 +25,7 @@ class WeWorkRemotelyProvider(JobAPIProvider):
         query_lower = query.lower()
         results = []
 
-        for category in self.CATEGORIES[:3]:
+        for category in self.CATEGORIES:
             try:
                 resp = requests.get(
                     f"https://weworkremotely.com/categories/{category}.json",

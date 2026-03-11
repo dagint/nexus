@@ -294,7 +294,7 @@ Candidate titles: {', '.join(resume_titles[:5])}"""
     response_text = call(prompt, model="claude-haiku-4-5-20251001", max_tokens=100, endpoint="title_match")
     if response_text:
         try:
-            json_match = re.search(r"\{[\s\S]*\}", response_text)
+            json_match = re.search(r"\{[\s\S]*?\}", response_text)
             if json_match:
                 result = json.loads(json_match.group())
                 score = min(int(result.get("score", 0)), 30)

@@ -53,8 +53,8 @@ def _rate_limit_key():
     try:
         if current_user.is_authenticated:
             return f"user:{current_user.id}"
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Could not determine authenticated user for rate limiting: %s", e)
     return get_remote_address()
 
 
@@ -99,6 +99,11 @@ def _metrics_before():
 def set_security_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
+    # NOTE: 'unsafe-inline' is required in script-src because templates use
+    # inline event handlers (onclick, onsubmit).  To remove it, migrate all
+    # inline handlers to addEventListener in external JS files, then switch to
+    # a nonce-based CSP.  'unsafe-inline' in style-src is kept for Bootstrap
+    # components that inject inline styles.
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "style-src 'self' 'unsafe-inline'; "
@@ -107,7 +112,8 @@ def set_security_headers(response):
         "font-src 'self'; "
         "object-src 'none'; "
         "base-uri 'self'; "
-        "form-action 'self';"
+        "form-action 'self'; "
+        "frame-ancestors 'none';"
     )
 
     # Record metrics (skip /static and /metrics)
@@ -122,8 +128,8 @@ def set_security_headers(response):
             start = getattr(request, "_metrics_start", None)
             if start:
                 observe_latency(path, request.method, _time.time() - start)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to record request metrics: %s", e)
 
     return response
 
@@ -516,6 +522,8 @@ with app.app_context():
 # Register API v1 blueprint
 from api_v1 import api_v1
 app.register_blueprint(api_v1)
+# CSRF exemption is safe here: every api_v1 route requires token authentication
+# via the @token_required decorator, so session-based CSRF attacks do not apply.
 csrf.exempt(api_v1)
 
 # Register feature blueprints

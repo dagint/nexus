@@ -385,11 +385,11 @@ document.addEventListener("DOMContentLoaded", function () {
                     }
                     var html = "";
                     data.notifications.forEach(function (n) {
-                        var time = n.created_at ? n.created_at.substring(5, 16) : "";
+                        var time = n.created_at ? escapeHtml(n.created_at.substring(5, 16)) : "";
                         if (n.link) {
-                            html += '<a class="dropdown-item small" href="' + n.link + '">' + n.message + '<br><small class="text-muted">' + time + '</small></a>';
+                            html += '<a class="dropdown-item small" href="' + escapeHtml(n.link) + '">' + escapeHtml(n.message) + '<br><small class="text-muted">' + time + '</small></a>';
                         } else {
-                            html += '<span class="dropdown-item small">' + n.message + '<br><small class="text-muted">' + time + '</small></span>';
+                            html += '<span class="dropdown-item small">' + escapeHtml(n.message) + '<br><small class="text-muted">' + time + '</small></span>';
                         }
                     });
                     notifList.innerHTML = html;
@@ -464,8 +464,8 @@ document.addEventListener("DOMContentLoaded", function () {
                     var html = "";
                     data.answers.forEach(function (qa) {
                         html += '<div class="card mb-2"><div class="card-body">';
-                        html += '<p class="fw-bold mb-1">' + qa.question + '</p>';
-                        html += '<p class="mb-0">' + qa.answer + '</p>';
+                        html += '<p class="fw-bold mb-1">' + escapeHtml(qa.question) + '</p>';
+                        html += '<p class="mb-0">' + escapeHtml(qa.answer) + '</p>';
                         html += '</div></div>';
                     });
 
@@ -549,7 +549,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                     var qualsHtml = "<ul>";
                     (draft.key_qualifications || []).forEach(function (q) {
-                        qualsHtml += "<li>" + q + "</li>";
+                        qualsHtml += "<li>" + escapeHtml(q) + "</li>";
                     });
                     qualsHtml += "</ul>";
                     document.getElementById("draftQualifications").innerHTML = qualsHtml;
@@ -558,14 +558,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
                     var skillsHtml = "<ul>";
                     (draft.skills_highlight || []).forEach(function (s) {
-                        skillsHtml += "<li>" + s + "</li>";
+                        skillsHtml += "<li>" + escapeHtml(s) + "</li>";
                     });
                     skillsHtml += "</ul>";
                     document.getElementById("draftSkills").innerHTML = skillsHtml;
 
                     var expHtml = "<ul>";
                     (draft.experience_highlight || []).forEach(function (e) {
-                        expHtml += "<li>" + e + "</li>";
+                        expHtml += "<li>" + escapeHtml(e) + "</li>";
                     });
                     expHtml += "</ul>";
                     document.getElementById("draftExperience").innerHTML = expHtml;
@@ -649,8 +649,8 @@ document.addEventListener("DOMContentLoaded", function () {
                     var techHtml = "";
                     (data.technical_questions || []).forEach(function (q, i) {
                         techHtml += '<div class="accordion-item">' +
-                            '<h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#techQ' + i + '">' + q.question + '</button></h2>' +
-                            '<div id="techQ' + i + '" class="accordion-collapse collapse"><div class="accordion-body">' + q.talking_points + '</div></div></div>';
+                            '<h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#techQ' + i + '">' + escapeHtml(q.question) + '</button></h2>' +
+                            '<div id="techQ' + i + '" class="accordion-collapse collapse"><div class="accordion-body">' + escapeHtml(q.talking_points) + '</div></div></div>';
                     });
                     document.getElementById("techQuestions").innerHTML = techHtml;
 
@@ -658,22 +658,22 @@ document.addEventListener("DOMContentLoaded", function () {
                     var behHtml = "";
                     (data.behavioral_questions || []).forEach(function (q, i) {
                         behHtml += '<div class="accordion-item">' +
-                            '<h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#behQ' + i + '">' + q.question + '</button></h2>' +
-                            '<div id="behQ' + i + '" class="accordion-collapse collapse"><div class="accordion-body">' + q.talking_points + '</div></div></div>';
+                            '<h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#behQ' + i + '">' + escapeHtml(q.question) + '</button></h2>' +
+                            '<div id="behQ' + i + '" class="accordion-collapse collapse"><div class="accordion-body">' + escapeHtml(q.talking_points) + '</div></div></div>';
                     });
                     document.getElementById("behavioralQuestions").innerHTML = behHtml;
 
                     // Questions to ask
                     var askHtml = "";
                     (data.questions_to_ask || []).forEach(function (q) {
-                        askHtml += "<li>" + q + "</li>";
+                        askHtml += "<li>" + escapeHtml(q) + "</li>";
                     });
                     document.getElementById("questionsToAsk").innerHTML = askHtml;
 
                     // Company tips
                     var tipsHtml = "";
                     (data.company_research_tips || []).forEach(function (t) {
-                        tipsHtml += "<li>" + t + "</li>";
+                        tipsHtml += "<li>" + escapeHtml(t) + "</li>";
                     });
                     document.getElementById("companyTips").innerHTML = tipsHtml;
 
@@ -753,25 +753,25 @@ document.addEventListener("DOMContentLoaded", function () {
 
                     if (d.summary_suggestion) {
                         html += '<div class="card mb-3"><div class="card-header"><strong>Suggested Summary</strong></div>';
-                        html += '<div class="card-body"><p>' + d.summary_suggestion + '</p></div></div>';
+                        html += '<div class="card-body"><p>' + escapeHtml(d.summary_suggestion) + '</p></div></div>';
                     }
                     if (d.keywords_to_add && d.keywords_to_add.length) {
                         html += '<div class="card mb-3"><div class="card-header"><strong>Keywords to Add</strong></div>';
                         html += '<div class="card-body"><div class="d-flex flex-wrap gap-1">';
-                        d.keywords_to_add.forEach(function(k) { html += '<span class="badge bg-danger">' + k + '</span>'; });
+                        d.keywords_to_add.forEach(function(k) { html += '<span class="badge bg-danger">' + escapeHtml(k) + '</span>'; });
                         html += '</div></div></div>';
                     }
                     if (d.skills_to_highlight && d.skills_to_highlight.length) {
                         html += '<div class="card mb-3"><div class="card-header"><strong>Skills to Highlight</strong></div>';
                         html += '<div class="card-body"><div class="d-flex flex-wrap gap-1">';
-                        d.skills_to_highlight.forEach(function(s) { html += '<span class="badge bg-success">' + s + '</span>'; });
+                        d.skills_to_highlight.forEach(function(s) { html += '<span class="badge bg-success">' + escapeHtml(s) + '</span>'; });
                         html += '</div></div></div>';
                     }
                     if (d.reworded_bullets && d.reworded_bullets.length) {
                         html += '<div class="card mb-3"><div class="card-header"><strong>Reworded Bullets</strong></div><div class="card-body">';
                         d.reworded_bullets.forEach(function(b) {
-                            if (b.original) html += '<p class="small text-muted mb-1"><del>' + b.original + '</del></p>';
-                            html += '<p class="mb-2">' + b.suggested + '</p>';
+                            if (b.original) html += '<p class="small text-muted mb-1"><del>' + escapeHtml(b.original) + '</del></p>';
+                            html += '<p class="mb-2">' + escapeHtml(b.suggested) + '</p>';
                         });
                         html += '</div></div>';
                     }
@@ -891,7 +891,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     html += '<div class="card mb-3"><div class="card-header d-flex justify-content-between align-items-center">';
                     html += '<strong>Connection Request Note</strong>';
                     html += '<button class="btn btn-sm btn-outline-secondary copy-text-btn" data-target="linkedinNote">Copy</button>';
-                    html += '</div><div class="card-body"><p id="linkedinNote" class="mb-0">' + (data.connection_note || '') + '</p>';
+                    html += '</div><div class="card-body"><p id="linkedinNote" class="mb-0">' + escapeHtml(data.connection_note || '') + '</p>';
                     html += '<small class="text-muted">' + (data.connection_note || '').length + '/300 characters</small>';
                     html += '</div></div>';
 
@@ -899,17 +899,17 @@ document.addEventListener("DOMContentLoaded", function () {
                     html += '<div class="card mb-3"><div class="card-header d-flex justify-content-between align-items-center">';
                     html += '<strong>InMail / Message Template</strong>';
                     html += '<button class="btn btn-sm btn-outline-secondary copy-text-btn" data-target="linkedinMessage">Copy</button>';
-                    html += '</div><div class="card-body"><p id="linkedinMessage" style="white-space:pre-wrap" class="mb-0">' + (data.inmail_message || '') + '</p>';
+                    html += '</div><div class="card-body"><p id="linkedinMessage" style="white-space:pre-wrap" class="mb-0">' + escapeHtml(data.inmail_message || '') + '</p>';
                     html += '</div></div>';
 
                     // Search URLs
                     if (data.search_urls) {
-                        html += '<div class="card mb-3"><div class="card-header"><strong>Find People at ' + company + '</strong></div>';
+                        html += '<div class="card mb-3"><div class="card-header"><strong>Find People at ' + escapeHtml(company) + '</strong></div>';
                         html += '<div class="card-body">';
-                        html += '<a href="' + (data.search_urls.company_people || '#') + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary me-2 mb-2">Company People</a>';
-                        html += '<a href="' + (data.search_urls.recruiters || '#') + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary me-2 mb-2">Recruiters</a>';
-                        html += '<a href="' + (data.search_urls.hiring_managers || '#') + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary me-2 mb-2">Hiring Managers</a>';
-                        html += '<a href="' + (data.search_urls.company_page || '#') + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary mb-2">Company Page</a>';
+                        html += '<a href="' + escapeHtml(data.search_urls.company_people || '#') + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary me-2 mb-2">Company People</a>';
+                        html += '<a href="' + escapeHtml(data.search_urls.recruiters || '#') + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary me-2 mb-2">Recruiters</a>';
+                        html += '<a href="' + escapeHtml(data.search_urls.hiring_managers || '#') + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary me-2 mb-2">Hiring Managers</a>';
+                        html += '<a href="' + escapeHtml(data.search_urls.company_page || '#') + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary mb-2">Company Page</a>';
                         html += '</div></div>';
                     }
 
@@ -931,7 +931,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 .catch(function (err) {
                     btn.disabled = false;
                     btn.textContent = originalText;
-                    contentEl.innerHTML = '<div class="alert alert-danger">Error: ' + err.message + '</div>';
+                    contentEl.innerHTML = '<div class="alert alert-danger">Error: ' + escapeHtml(err.message) + '</div>';
                 });
         });
     });
@@ -969,7 +969,7 @@ document.addEventListener("DOMContentLoaded", function () {
                         html += '<div class="card mb-3"><div class="card-header"><strong>Who to Connect With</strong></div>';
                         html += '<ul class="list-group list-group-flush">';
                         data.who_to_connect_with.forEach(function(w) {
-                            html += '<li class="list-group-item">' + w + '</li>';
+                            html += '<li class="list-group-item">' + escapeHtml(w) + '</li>';
                         });
                         html += '</ul></div>';
                     }
@@ -979,7 +979,7 @@ document.addEventListener("DOMContentLoaded", function () {
                         html += '<div class="card mb-3"><div class="card-header"><strong>Conversation Starters</strong></div>';
                         html += '<ul class="list-group list-group-flush">';
                         data.conversation_starters.forEach(function(c) {
-                            html += '<li class="list-group-item small">' + c + '</li>';
+                            html += '<li class="list-group-item small">' + escapeHtml(c) + '</li>';
                         });
                         html += '</ul></div>';
                     }
@@ -989,7 +989,7 @@ document.addEventListener("DOMContentLoaded", function () {
                         html += '<div class="card mb-3"><div class="card-header"><strong>Groups &amp; Communities</strong></div>';
                         html += '<ul class="list-group list-group-flush">';
                         data.linkedin_groups.forEach(function(g) {
-                            html += '<li class="list-group-item small">' + g + '</li>';
+                            html += '<li class="list-group-item small">' + escapeHtml(g) + '</li>';
                         });
                         html += '</ul></div>';
                     }
@@ -999,7 +999,7 @@ document.addEventListener("DOMContentLoaded", function () {
                         html += '<div class="card mb-3"><div class="card-header"><strong>Events to Attend</strong></div>';
                         html += '<ul class="list-group list-group-flush">';
                         data.events_to_attend.forEach(function(e) {
-                            html += '<li class="list-group-item small">' + e + '</li>';
+                            html += '<li class="list-group-item small">' + escapeHtml(e) + '</li>';
                         });
                         html += '</ul></div>';
                     }
@@ -1010,8 +1010,8 @@ document.addEventListener("DOMContentLoaded", function () {
                         html += '<div class="card-body">';
                         data.email_templates.forEach(function(tmpl, i) {
                             html += '<div class="mb-3' + (i > 0 ? ' border-top pt-3' : '') + '">';
-                            html += '<p class="fw-bold mb-1">Subject: ' + (tmpl.subject || '') + '</p>';
-                            html += '<p class="small mb-1" style="white-space:pre-wrap">' + (tmpl.body || '') + '</p>';
+                            html += '<p class="fw-bold mb-1">Subject: ' + escapeHtml(tmpl.subject || '') + '</p>';
+                            html += '<p class="small mb-1" style="white-space:pre-wrap">' + escapeHtml(tmpl.body || '') + '</p>';
                             html += '<button class="btn btn-sm btn-outline-secondary copy-email-btn" data-idx="' + i + '">Copy</button>';
                             html += '</div>';
                         });
@@ -1037,7 +1037,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 .catch(function (err) {
                     btn.disabled = false;
                     btn.textContent = originalText;
-                    contentEl.innerHTML = '<div class="alert alert-danger">Error: ' + err.message + '</div>';
+                    contentEl.innerHTML = '<div class="alert alert-danger">Error: ' + escapeHtml(err.message) + '</div>';
                 });
         });
     });

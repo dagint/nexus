@@ -1,13 +1,29 @@
+import logging
 import os
 import sys
 from dotenv import load_dotenv
 
 load_dotenv()
 
+_logger = logging.getLogger(__name__)
+
+
+def _get_secret_key():
+    """Return the secret key from the environment, or generate a random one with a warning."""
+    key = os.getenv("FLASK_SECRET_KEY")
+    if key:
+        return key
+    _logger.warning(
+        "FLASK_SECRET_KEY is not set — using a randomly generated key. "
+        "Sessions will not persist across restarts. "
+        "Set FLASK_SECRET_KEY in your environment or .env file for production."
+    )
+    return os.urandom(32).hex()
+
 
 class Config:
     # Flask
-    SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-in-production")
+    SECRET_KEY = _get_secret_key()
     MAX_CONTENT_LENGTH = 5 * 1024 * 1024  # 5MB max upload
 
     # Job APIs
@@ -45,8 +61,8 @@ class Config:
     @classmethod
     def validate(cls):
         warnings = []
-        if cls.SECRET_KEY == "dev-secret-change-in-production":
-            warnings.append("FLASK_SECRET_KEY is using default value - set it in .env for production")
+        if not os.getenv("FLASK_SECRET_KEY"):
+            warnings.append("FLASK_SECRET_KEY is not set - set it in .env for production")
         if not cls.RAPIDAPI_KEY:
             warnings.append("RAPIDAPI_KEY not set - JSearch API will be unavailable")
         if not cls.ADZUNA_APP_ID or not cls.ADZUNA_APP_KEY:

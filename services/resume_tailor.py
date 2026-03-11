@@ -53,7 +53,7 @@ Return ONLY valid JSON, no preamble or explanation."""
     response = call(prompt, max_tokens=1500, endpoint="resume_tailor")
     if response:
         try:
-            json_match = re.search(r"\{[\s\S]*\}", response)
+            json_match = re.search(r"\{[\s\S]*?\}", response)
             if json_match:
                 result = json.loads(json_match.group())
                 # Ensure all expected keys exist
