@@ -188,7 +188,8 @@ def index():
 @login_required
 def alerts():
     saved = get_saved_searches(current_user.id)
-    return render_template("alerts.html", saved_searches=saved)
+    smtp_configured = bool(Config.SMTP_USER and Config.SMTP_PASSWORD)
+    return render_template("alerts.html", saved_searches=saved, smtp_configured=smtp_configured)
 
 
 @app.route("/alerts", methods=["POST"])
