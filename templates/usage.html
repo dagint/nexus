@@ -47,7 +47,7 @@
     <div class="card-header"><h5 class="mb-0">Cost by Provider</h5></div>
     <div class="card-body">
         {% if summary %}
-        {% set provider_colors = {"anthropic": "primary", "ollama": "secondary", "SerpApi": "success", "JSearch": "info", "Adzuna": "warning", "Remotive": "dark", "WeWorkRemotely": "dark"} %}
+        {% set provider_colors = {"anthropic": "primary", "ollama": "secondary", "SerpApi": "success", "JSearch": "info", "Adzuna": "warning", "Remotive": "dark", "WeWorkRemotely": "dark", "RemoteOK": "success", "TheMuse": "info", "USAJobs": "primary", "Jooble": "warning"} %}
         {% for s in summary %}
         <div class="mb-3">
             <div class="d-flex justify-content-between mb-1">
@@ -129,6 +129,10 @@
                         <tr><td>Adzuna</td><td>Free tier</td></tr>
                         <tr><td>Remotive</td><td>Free</td></tr>
                         <tr><td>We Work Remotely</td><td>Free</td></tr>
+                        <tr><td>RemoteOK</td><td>Free</td></tr>
+                        <tr><td>The Muse</td><td>Free</td></tr>
+                        <tr><td>USAJobs</td><td>Free</td></tr>
+                        <tr><td>Jooble</td><td>Free tier</td></tr>
                         <tr><td>Ollama (local)</td><td>Free</td></tr>
                     </tbody>
                 </table>

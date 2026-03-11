@@ -17,6 +17,10 @@ from services.apis.remotive import RemotiveProvider
 from services.apis.weworkremotely import WeWorkRemotelyProvider
 from services.apis.adzuna import AdzunaProvider
 from services.apis.serpapi import SerpApiProvider
+from services.apis.remoteok import RemoteOKProvider
+from services.apis.themuse import TheMuseProvider
+from services.apis.usajobs import USAJobsProvider
+from services.apis.jooble import JoobleProvider
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +31,10 @@ PROVIDER_CLASSES: list[type[JobAPIProvider]] = [
     WeWorkRemotelyProvider,
     AdzunaProvider,
     SerpApiProvider,
+    RemoteOKProvider,
+    TheMuseProvider,
+    USAJobsProvider,
+    JoobleProvider,
 ]
 
 
