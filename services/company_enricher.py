@@ -44,18 +44,37 @@ def enrich_jobs(jobs):
         else:
             uncached.append(name)
 
-    # Scrape uncached companies in parallel
+    # Scrape uncached companies in parallel (with circuit breaker)
     if uncached:
+        consecutive_failures = 0
+        max_consecutive_failures = 2
         workers = min(_MAX_ENRICHMENT_WORKERS, len(uncached))
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {executor.submit(enrich_company, name): name for name in uncached}
             for future in as_completed(futures):
                 name = futures[future]
                 try:
-                    company_info[name] = future.result()
+                    result = future.result()
+                    company_info[name] = result
+                    if result is not None:
+                        consecutive_failures = 0
+                    else:
+                        consecutive_failures += 1
                 except Exception as e:
                     logger.warning("Failed to enrich %s: %s", name, e)
                     company_info[name] = None
+                    consecutive_failures += 1
+
+                if consecutive_failures >= max_consecutive_failures:
+                    logger.warning("Circuit breaker: %d consecutive enrichment failures, skipping remaining companies", consecutive_failures)
+                    for remaining_future in futures:
+                        if not remaining_future.done():
+                            remaining_future.cancel()
+                    # Set remaining companies to None
+                    for remaining_name in uncached:
+                        if remaining_name not in company_info:
+                            company_info[remaining_name] = None
+                    break
 
     for job in jobs:
         job["company_info"] = company_info.get(job.get("company", ""))
@@ -82,7 +101,7 @@ def _scrape_company_data(company_name):
         query = f"{company_name} company size employees glassdoor rating"
         url = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(query)}"
 
-        resp = requests.get(url, headers=headers, timeout=10)
+        resp = requests.get(url, headers=headers, timeout=3)
         if resp.status_code == 200:
             soup = BeautifulSoup(resp.text, "html.parser")
             snippets = soup.select(".result__snippet")

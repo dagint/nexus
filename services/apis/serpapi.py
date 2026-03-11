@@ -1,3 +1,5 @@
+import re
+
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
@@ -31,6 +33,9 @@ class SerpApiProvider(JobAPIProvider):
             "api_key": Config.SERPAPI_KEY,
         }
         if location:
+            # SerpApi only accepts a single location; split compound locations like "FL or Remote"
+            if re.search(r"\s+or\s+", location, re.IGNORECASE):
+                location = re.split(r"\s+or\s+", location, flags=re.IGNORECASE)[0].strip()
             params["location"] = location
         if remote_only:
             params["ltype"] = "1"  # Work from home filter

@@ -95,9 +95,15 @@ Resume:
     if not response_text:
         raise RuntimeError("Claude API unavailable")
     # Extract JSON from response
-    json_match = re.search(r"\{[\s\S]*?\}", response_text)
+    json_match = re.search(r"\{[\s\S]*\}", response_text)
     if json_match:
-        result = json.loads(json_match.group())
+        json_str = json_match.group()
+        # Strip JavaScript-style comments that LLMs sometimes include
+        json_str = re.sub(r'//[^\n]*', '', json_str)
+        json_str = re.sub(r'/\*.*?\*/', '', json_str, flags=re.DOTALL)
+        # Strip trailing commas before } or ]
+        json_str = re.sub(r',\s*([}\]])', r'\1', json_str)
+        result = json.loads(json_str)
         logger.info("Claude extracted %d skills, seniority: %s",
                      len(result.get("skills", [])), result.get("seniority_tier"))
         return result
