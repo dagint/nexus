@@ -1287,15 +1287,10 @@ def get_role_velocity(company, title, months=6):
 # --- Search Templates ---
 
 def seed_search_templates(conn=None):
-    """Insert system search templates if none exist."""
+    """Insert system search templates, adding any missing ones by name."""
     own_conn = conn is None
     if own_conn:
         conn = get_db()
-    existing = conn.execute("SELECT COUNT(*) as c FROM search_templates WHERE is_system = 1").fetchone()
-    if existing["c"] > 0:
-        if own_conn:
-            _safe_close(conn)
-        return
     templates = [
         ("Remote Python Backend Engineer", "Engineering", "python backend engineer", "", 1, "Python, Django/Flask, APIs, microservices"),
         ("Full-Stack React Developer", "Engineering", "full stack react developer", "", 0, "React, Node.js, full-stack web development"),
@@ -1309,16 +1304,34 @@ def seed_search_templates(conn=None):
         ("Backend Java/Kotlin Developer", "Engineering", "backend java kotlin developer", "", 0, "Java, Spring Boot, Kotlin, microservices"),
         ("Data Analyst / BI", "Data", "data analyst business intelligence", "", 0, "SQL, Tableau/Power BI, Python, data visualization"),
         ("Mobile Developer (iOS/Android)", "Engineering", "mobile developer ios android", "", 0, "Swift, Kotlin, React Native, Flutter"),
+        # Healthcare
+        ("Registered Nurse (RN)", "Healthcare", "registered nurse RN", "", 0, "Bedside care, patient assessment, clinical nursing"),
+        ("Travel Nurse", "Healthcare", "travel nurse contract", "", 0, "Travel nursing assignments, contract RN positions"),
+        ("Nurse Practitioner (NP)", "Healthcare", "nurse practitioner NP", "", 0, "Advanced practice, primary care, prescriptive authority"),
+        ("Medical Assistant", "Healthcare", "medical assistant", "", 0, "Clinical support, vitals, patient intake, EHR"),
+        ("Healthcare Administrator", "Healthcare", "healthcare administrator manager", "", 0, "Hospital operations, compliance, staff management"),
+        ("Physical Therapist", "Healthcare", "physical therapist PT", "", 0, "Rehabilitation, musculoskeletal, patient mobility"),
+        ("Pharmacy Technician", "Healthcare", "pharmacy technician", "", 0, "Prescription processing, inventory, patient counseling support"),
+        ("Medical Coder / Biller", "Healthcare", "medical coder biller", "", 1, "ICD-10, CPT coding, revenue cycle, claims processing"),
+        ("Health Informatics", "Healthcare", "health informatics analyst", "", 0, "EHR systems, clinical data, healthcare IT"),
     ]
-    conn.executemany(
-        """INSERT INTO search_templates (name, category, query, location, remote_only, description, is_system, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, 1, NULL)""",
-        templates,
-    )
-    conn.commit()
+    existing = {
+        row["name"]
+        for row in conn.execute(
+            "SELECT name FROM search_templates WHERE is_system = 1"
+        ).fetchall()
+    }
+    new_templates = [t for t in templates if t[0] not in existing]
+    if new_templates:
+        conn.executemany(
+            """INSERT INTO search_templates (name, category, query, location, remote_only, description, is_system, user_id)
+               VALUES (?, ?, ?, ?, ?, ?, 1, NULL)""",
+            new_templates,
+        )
+        conn.commit()
+        logger.info("Seeded %d system search templates", len(new_templates))
     if own_conn:
         _safe_close(conn)
-    logger.info("Seeded %d system search templates", len(templates))
 
 
 def get_search_templates(user_id=None):
