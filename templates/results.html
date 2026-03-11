@@ -83,7 +83,7 @@
     <div class="col-lg-9">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
-                <h4 class="mb-0">{{ total_jobs }} results</h4>
+                <h4 class="mb-0" id="resultsCount" data-total="{{ total_jobs }}">{{ total_jobs }} results</h4>
                 <p class="text-muted small mb-0">
                     "{{ query }}"{% if location %} in {{ location }}{% endif %}
                 </p>
@@ -175,7 +175,7 @@
 
         <!-- Pagination -->
         {% if total_pages > 1 %}
-        <nav class="mt-4">
+        <nav class="mt-4" id="paginationNav">
             <ul class="pagination justify-content-center">
                 <li class="page-item {{ 'disabled' if page <= 1 }}">
                     <a class="page-link" href="{{ url_for('search.search', query=query, location=location, sort=sort, page=page-1) }}">Previous</a>
