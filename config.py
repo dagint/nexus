@@ -33,6 +33,9 @@ class Config:
     ADZUNA_APP_ID = os.getenv("ADZUNA_APP_ID", "")
     ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY", "")
     SERPAPI_KEY = os.getenv("SERPAPI_KEY", "")
+    USAJOBS_API_KEY = os.getenv("USAJOBS_API_KEY", "")
+    USAJOBS_EMAIL = os.getenv("USAJOBS_EMAIL", "")
+    JOOBLE_API_KEY = os.getenv("JOOBLE_API_KEY", "")
 
     # SMTP
     SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
