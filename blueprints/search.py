@@ -33,14 +33,9 @@ def init_search_limiter(limiter):
 def search():
     from services.resume_parser import parse_resume
     from services.skills_extractor import extract_keywords, extract_keywords_smart
-    from services.job_search import search_all
-    from services.job_analyzer import analyze_jobs
+    from services.job_search import search_and_process
     from services.job_matcher import score_jobs, generate_match_summary
-    from services.deduplicator import (
-        deduplicate_cross_source, flag_staleness, flag_staffing_agencies, sort_within_tiers,
-    )
-    from services.salary_normalizer import normalize_salary
-    from services.company_enricher import enrich_jobs
+    from services.deduplicator import sort_within_tiers
 
     resume_text = ""
     resume_data = {}
@@ -137,39 +132,13 @@ def search():
         flash("Please provide a resume or enter search keywords.", "warning")
         return redirect(url_for("index"))
 
-    # Search
+    # Search + shared processing (cached: analyze, salary normalize, dedup, enrich)
     try:
-        jobs = search_all(query, location, remote_only, date_posted, employment_type=employment_type)
+        jobs = search_and_process(query, location, remote_only, date_posted, employment_type=employment_type)
     except Exception as e:
         logger.error("Search failed: %s", e)
         flash("Search encountered an error. Some results may be missing.", "warning")
         jobs = []
-
-    # Analyze
-    jobs = analyze_jobs(jobs)
-
-    # Normalize salaries
-    for job in jobs:
-        salary_info = normalize_salary(
-            job.get("salary_min"), job.get("salary_max"), job.get("description", "")
-        )
-        job["salary_annual_min"] = salary_info.get("salary_annual_min")
-        job["salary_annual_max"] = salary_info.get("salary_annual_max")
-        job["salary_period"] = salary_info.get("salary_period", "annual")
-        # Backfill missing salary from description extraction
-        if not job.get("salary_min") and salary_info.get("salary_min"):
-            job["salary_min"] = salary_info["salary_min"]
-            job["salary_max"] = salary_info.get("salary_max")
-
-    jobs = deduplicate_cross_source(jobs)
-    jobs = flag_staleness(jobs)
-    jobs = flag_staffing_agencies(jobs)
-
-    # Enrich company data (cached, 7-day TTL)
-    try:
-        jobs = enrich_jobs(jobs)
-    except Exception as e:
-        logger.warning("Company enrichment failed: %s", e)
 
     # Fetch user settings once for commute + scoring + filtering
     user_settings = None
@@ -365,9 +334,7 @@ def search():
 @login_required
 def export_csv():
     """Export search results as CSV."""
-    # Re-run the search to get data (or we could cache it, but this is simpler)
-    from services.job_search import search_all
-    from services.job_analyzer import analyze_jobs
+    from services.job_search import search_and_process
 
     query = request.args.get("query", "")
     location = request.args.get("location", "")
@@ -377,8 +344,7 @@ def export_csv():
         flash("No search to export.", "warning")
         return redirect(url_for("index"))
 
-    jobs = search_all(query, location, remote_only)
-    jobs = analyze_jobs(jobs)
+    jobs = search_and_process(query, location, remote_only)
 
     output = io.StringIO()
     writer = csv.writer(output)

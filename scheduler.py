@@ -170,11 +170,8 @@ def _check_alerts(app):
     Email throttling: max MAX_EMAILS_PER_USER_PER_DAY emails per user per 24h.
     Multiple alerts for the same user are consolidated into a single digest.
     """
-    from services.job_search import search_all
-    from services.job_analyzer import analyze_jobs
+    from services.job_search import search_and_process
     from services.job_matcher import score_jobs
-    from services.deduplicator import flag_staleness, flag_staffing_agencies
-    from services.company_enricher import enrich_jobs
     from services.notifier import send_consolidated_digest
 
     logger.info("Running alert check")
@@ -220,20 +217,11 @@ def _check_alerts(app):
                     location = search["location"] or ""
                     remote_only = bool(search["remote_only"])
 
-                    jobs = search_all(query, location, remote_only)
-                    jobs = analyze_jobs(jobs)
+                    jobs = search_and_process(query, location, remote_only)
 
                     skills_data = json.loads(search["skills_json"]) if search["skills_json"] else None
                     if skills_data:
                         jobs = score_jobs(jobs, skills_data)
-
-                    jobs = flag_staleness(jobs)
-                    jobs = flag_staffing_agencies(jobs)
-
-                    try:
-                        jobs = enrich_jobs(jobs)
-                    except Exception as e:
-                        logger.warning("Enrichment failed in alert: %s", e)
 
                     # Filter to non-stale, non-staffing jobs for higher quality
                     quality_jobs = [

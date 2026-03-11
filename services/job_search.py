@@ -122,6 +122,59 @@ def search_all(query, location, remote_only=False, date_posted="month", page=1, 
     return all_results
 
 
+_processed_cache = _LRUCache()
+
+
+def search_and_process(query, location, remote_only=False, date_posted="month", page=1, employment_type=""):
+    """Search all APIs and run shared processing (analyze, normalize, dedup, enrich).
+
+    Returns processed jobs ready for per-user scoring. Results are cached
+    separately from raw API results so the expensive processing pipeline
+    (analysis, salary normalization, deduplication, enrichment) is skipped
+    on repeat searches.
+    """
+    import copy
+
+    cache_key = _cache_key("processed", query, location, remote_only, date_posted, page, employment_type)
+    cached = _processed_cache.get(cache_key)
+    if cached is not None:
+        logger.info("Processed cache hit for query=%s", query)
+        return copy.deepcopy(cached)
+
+    from services.job_analyzer import analyze_jobs
+    from services.deduplicator import deduplicate_cross_source, flag_staleness, flag_staffing_agencies
+    from services.salary_normalizer import normalize_salary
+    from services.company_enricher import enrich_jobs
+
+    jobs = search_all(query, location, remote_only, date_posted, page, employment_type)
+
+    jobs = analyze_jobs(jobs)
+
+    for job in jobs:
+        salary_info = normalize_salary(
+            job.get("salary_min"), job.get("salary_max"), job.get("description", "")
+        )
+        job["salary_annual_min"] = salary_info.get("salary_annual_min")
+        job["salary_annual_max"] = salary_info.get("salary_annual_max")
+        job["salary_period"] = salary_info.get("salary_period", "annual")
+        if not job.get("salary_min") and salary_info.get("salary_min"):
+            job["salary_min"] = salary_info["salary_min"]
+            job["salary_max"] = salary_info.get("salary_max")
+
+    jobs = deduplicate_cross_source(jobs)
+    jobs = flag_staleness(jobs)
+    jobs = flag_staffing_agencies(jobs)
+
+    try:
+        jobs = enrich_jobs(jobs)
+    except Exception as e:
+        logger.warning("Company enrichment failed: %s", e)
+
+    _processed_cache.set(cache_key, jobs)
+    logger.info("Processed and cached %d jobs for query=%s", len(jobs), query)
+    return copy.deepcopy(jobs)
+
+
 def get_unavailable_sources():
     """Return names of providers that aren't configured."""
     all_p = get_all_providers()
