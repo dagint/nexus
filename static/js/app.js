@@ -32,6 +32,24 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+    // --- Expand/collapse job descriptions ---
+    document.querySelectorAll(".expand-desc-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            var card = btn.closest(".mb-2");
+            var short = card.querySelector(".job-desc-short");
+            var full = card.querySelector(".job-desc-full");
+            if (full.classList.contains("d-none")) {
+                full.classList.remove("d-none");
+                short.classList.add("d-none");
+                btn.textContent = "Show less";
+            } else {
+                full.classList.add("d-none");
+                short.classList.remove("d-none");
+                btn.textContent = "Show more";
+            }
+        });
+    });
+
     // --- Client-side filtering ---
     const filterChecks = document.querySelectorAll(".filter-check");
     const sourceChecks = document.querySelectorAll(".source-check");
