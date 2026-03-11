@@ -29,7 +29,7 @@
                     {% if job.location %} &mdash; {{ job.location }}{% endif %}
                 </h6>
             </div>
-            <div class="d-flex gap-1 flex-shrink-0">
+            <div class="d-flex gap-1 flex-shrink-0 flex-wrap justify-content-end" style="max-width: 50%;">
                 {% if job.remote_status == 'remote' %}
                 <span class="badge bg-success">Remote</span>
                 {% elif job.remote_status == 'hybrid' %}
@@ -94,10 +94,16 @@
         </p>
         {% endif %}
 
-        <!-- Description excerpt -->
-        <p class="card-text small text-muted mb-2">
-            {{ job.description[:300] | striptags }}{% if job.description | length > 300 %}...{% endif %}
-        </p>
+        <!-- Description with expand/collapse -->
+        <div class="mb-2">
+            <p class="card-text small text-muted mb-1 job-desc-short">
+                {{ job.description[:300] | striptags }}{% if job.description | length > 300 %}...{% endif %}
+            </p>
+            {% if job.description | length > 300 %}
+            <div class="job-desc-full small text-muted mb-1 d-none" style="white-space: pre-line;">{{ job.description | striptags }}</div>
+            <button class="btn btn-sm btn-link p-0 text-decoration-none expand-desc-btn" type="button">Show more</button>
+            {% endif %}
+        </div>
 
         <!-- Commute info -->
         {% if job.commute_info %}
@@ -150,121 +156,118 @@
         </div>
         {% endif %}
 
-        <!-- Footer -->
-        <div class="d-flex justify-content-between align-items-center">
-            <div class="small text-muted">
-                <span class="badge bg-light text-dark border">{{ job.source }}</span>
-                {% if job.posted_date %}
-                &mdash; Posted: {{ job.posted_date[:10] }}
-                {% endif %}
-                {% if job.age_days is not none %}
-                ({{ job.age_days }}d ago)
-                {% endif %}
-            </div>
-            <div class="d-flex gap-2">
-                {% if current_user.is_authenticated %}
-                {% if dismissed_keys is defined and job.job_key in dismissed_keys %}
-                <button class="btn btn-sm btn-secondary dismiss-btn" data-job-key="{{ job.job_key }}" data-dismissed="true"
-                        data-title="{{ job.title }}" data-company="{{ job.company }}">
-                    Dismissed
-                </button>
-                {% else %}
-                <button class="btn btn-sm btn-outline-secondary dismiss-btn" data-job-key="{{ job.job_key }}" data-dismissed="false"
-                        data-title="{{ job.title }}" data-company="{{ job.company }}"
-                        title="Not interested">
-                    <span aria-hidden="true">&darr;</span> Not Interested
-                </button>
-                {% endif %}
-                {% endif %}
+        <!-- Source + Date row -->
+        <div class="d-flex align-items-center gap-2 mb-2 small text-muted">
+            <span class="badge bg-light text-dark border">{{ job.source }}</span>
+            {% if job.posted_date %}
+            <span>Posted: {{ job.posted_date[:10] }}</span>
+            {% endif %}
+            {% if job.age_days is not none %}
+            <span>({{ job.age_days }}d ago)</span>
+            {% endif %}
+        </div>
 
-                {% if current_user.is_authenticated %}
-                {% if job.job_key in bookmarked_keys %}
-                <button class="btn btn-sm btn-warning bookmark-btn" data-job-key="{{ job.job_key }}" data-bookmarked="true"
-                        data-title="{{ job.title }}" data-company="{{ job.company }}">
-                    Bookmarked
-                </button>
-                {% else %}
-                <button class="btn btn-sm btn-outline-warning bookmark-btn" data-job-key="{{ job.job_key }}" data-bookmarked="false"
-                        data-title="{{ job.title }}" data-company="{{ job.company }}">
-                    Bookmark
-                </button>
-                {% endif %}
-                {% endif %}
+        <!-- Action buttons -->
+        <div class="d-flex flex-wrap gap-1">
+            {% if current_user.is_authenticated %}
+            {% if dismissed_keys is defined and job.job_key in dismissed_keys %}
+            <button class="btn btn-sm btn-secondary dismiss-btn" data-job-key="{{ job.job_key }}" data-dismissed="true"
+                    data-title="{{ job.title }}" data-company="{{ job.company }}">
+                Dismissed
+            </button>
+            {% else %}
+            <button class="btn btn-sm btn-outline-secondary dismiss-btn" data-job-key="{{ job.job_key }}" data-dismissed="false"
+                    data-title="{{ job.title }}" data-company="{{ job.company }}"
+                    title="Not interested">
+                Not Interested
+            </button>
+            {% endif %}
+            {% endif %}
 
-                {% if current_user.is_authenticated %}
-                <button class="btn btn-sm btn-outline-info cover-letter-btn"
-                        data-title="{{ job.title }}" data-company="{{ job.company }}"
-                        data-description="{{ job.description[:2000] | e }}">
-                    Cover Letter
-                </button>
-                {% endif %}
+            {% if current_user.is_authenticated %}
+            {% if job.job_key in bookmarked_keys %}
+            <button class="btn btn-sm btn-warning bookmark-btn" data-job-key="{{ job.job_key }}" data-bookmarked="true"
+                    data-title="{{ job.title }}" data-company="{{ job.company }}">
+                Bookmarked
+            </button>
+            {% else %}
+            <button class="btn btn-sm btn-outline-warning bookmark-btn" data-job-key="{{ job.job_key }}" data-bookmarked="false"
+                    data-title="{{ job.title }}" data-company="{{ job.company }}">
+                Bookmark
+            </button>
+            {% endif %}
+            {% endif %}
 
-                {% if current_user.is_authenticated %}
-                <button class="btn btn-sm btn-outline-primary screening-btn"
-                        data-title="{{ job.title }}" data-company="{{ job.company }}"
-                        data-description="{{ job.description[:2000] | e }}">
-                    Q&amp;A
-                </button>
-                <button class="btn btn-sm btn-outline-primary draft-btn"
-                        data-title="{{ job.title }}" data-company="{{ job.company }}"
-                        data-description="{{ job.description[:2000] | e }}">
-                    Draft
-                </button>
-                <button class="btn btn-sm btn-outline-primary tailor-resume-btn d-none d-md-inline-block"
-                        data-title="{{ job.title }}" data-company="{{ job.company }}"
-                        data-description="{{ job.description[:2000] | e }}">
-                    Tailor
-                </button>
-                <button class="btn btn-sm btn-outline-secondary interview-prep-btn"
-                        data-title="{{ job.title }}" data-company="{{ job.company }}"
-                        data-description="{{ job.description[:2000] | e }}">
-                    Prep
-                </button>
-                <button class="btn btn-sm btn-outline-success elevator-pitch-btn"
-                        data-title="{{ job.title }}" data-company="{{ job.company }}"
-                        data-description="{{ job.description[:2000] | e }}">
-                    Fit
-                </button>
-                <button class="btn btn-sm btn-outline-info linkedin-helper-btn"
-                        data-title="{{ job.title }}" data-company="{{ job.company }}"
-                        data-description="{{ job.description[:2000] | e }}">
-                    LinkedIn
-                </button>
-                <button class="btn btn-sm btn-outline-secondary networking-btn"
-                        data-title="{{ job.title }}" data-company="{{ job.company }}"
-                        data-description="{{ job.description[:2000] | e }}">
-                    Network
-                </button>
-                {% endif %}
+            {% if current_user.is_authenticated %}
+            <button class="btn btn-sm btn-outline-info cover-letter-btn"
+                    data-title="{{ job.title }}" data-company="{{ job.company }}"
+                    data-description="{{ job.description[:2000] | e }}">
+                Cover Letter
+            </button>
+            <button class="btn btn-sm btn-outline-primary screening-btn"
+                    data-title="{{ job.title }}" data-company="{{ job.company }}"
+                    data-description="{{ job.description[:2000] | e }}">
+                Q&amp;A
+            </button>
+            <button class="btn btn-sm btn-outline-primary draft-btn"
+                    data-title="{{ job.title }}" data-company="{{ job.company }}"
+                    data-description="{{ job.description[:2000] | e }}">
+                Draft
+            </button>
+            <button class="btn btn-sm btn-outline-primary tailor-resume-btn"
+                    data-title="{{ job.title }}" data-company="{{ job.company }}"
+                    data-description="{{ job.description[:2000] | e }}">
+                Tailor
+            </button>
+            <button class="btn btn-sm btn-outline-secondary interview-prep-btn"
+                    data-title="{{ job.title }}" data-company="{{ job.company }}"
+                    data-description="{{ job.description[:2000] | e }}">
+                Prep
+            </button>
+            <button class="btn btn-sm btn-outline-success elevator-pitch-btn"
+                    data-title="{{ job.title }}" data-company="{{ job.company }}"
+                    data-description="{{ job.description[:2000] | e }}">
+                Fit
+            </button>
+            <button class="btn btn-sm btn-outline-info linkedin-helper-btn"
+                    data-title="{{ job.title }}" data-company="{{ job.company }}"
+                    data-description="{{ job.description[:2000] | e }}">
+                LinkedIn
+            </button>
+            <button class="btn btn-sm btn-outline-secondary networking-btn"
+                    data-title="{{ job.title }}" data-company="{{ job.company }}"
+                    data-description="{{ job.description[:2000] | e }}">
+                Network
+            </button>
+            {% endif %}
 
-                <button class="btn btn-sm btn-outline-dark share-btn"
-                        data-job-key="{{ job.job_key }}"
-                        data-title="{{ job.title }}" data-company="{{ job.company }}"
-                        data-location="{{ job.location or '' }}"
-                        data-description="{{ job.description[:2000] | e }}"
-                        data-apply-url="{{ job.apply_url or '' }}"
-                        data-remote-status="{{ job.remote_status or '' }}"
-                        data-source="{{ job.source or '' }}">
-                    Share
-                </button>
+            <button class="btn btn-sm btn-outline-dark share-btn"
+                    data-job-key="{{ job.job_key }}"
+                    data-title="{{ job.title }}" data-company="{{ job.company }}"
+                    data-location="{{ job.location or '' }}"
+                    data-description="{{ job.description[:2000] | e }}"
+                    data-apply-url="{{ job.apply_url or '' }}"
+                    data-remote-status="{{ job.remote_status or '' }}"
+                    data-source="{{ job.source or '' }}">
+                Share
+            </button>
 
-                {% if job.job_key in applied_keys %}
-                <button class="btn btn-sm btn-outline-secondary applied-btn" data-job-key="{{ job.job_key }}" data-applied="true">
-                    Applied
-                </button>
-                {% else %}
-                <button class="btn btn-sm btn-outline-success applied-btn" data-job-key="{{ job.job_key }}"
-                        data-title="{{ job.title }}" data-company="{{ job.company }}" data-applied="false">
-                    Mark Applied
-                </button>
-                {% endif %}
-                {% if job.apply_url %}
-                <a href="{{ job.apply_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-primary apply-link"
-                   data-job-key="{{ job.job_key }}" data-title="{{ job.title }}" data-company="{{ job.company }}">
-                    Apply &rarr;
-                </a>
-                {% endif %}
-            </div>
+            {% if job.job_key in applied_keys %}
+            <button class="btn btn-sm btn-outline-secondary applied-btn" data-job-key="{{ job.job_key }}" data-applied="true">
+                Applied
+            </button>
+            {% else %}
+            <button class="btn btn-sm btn-outline-success applied-btn" data-job-key="{{ job.job_key }}"
+                    data-title="{{ job.title }}" data-company="{{ job.company }}" data-applied="false">
+                Mark Applied
+            </button>
+            {% endif %}
+            {% if job.apply_url %}
+            <a href="{{ job.apply_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-primary apply-link"
+               data-job-key="{{ job.job_key }}" data-title="{{ job.title }}" data-company="{{ job.company }}">
+                Apply &rarr;
+            </a>
+            {% endif %}
         </div>
     </div>
 </div>
