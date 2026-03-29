@@ -116,8 +116,10 @@ def webhooks_settings():
             flash("Webhook URL is required.", "error")
             return redirect(url_for("settings.webhooks_settings"))
 
-        if not url.startswith("http://") and not url.startswith("https://"):
-            flash("Webhook URL must start with http:// or https://", "error")
+        from services.webhook_sender import validate_webhook_url
+        valid, err = validate_webhook_url(url)
+        if not valid:
+            flash(err, "error")
             return redirect(url_for("settings.webhooks_settings"))
 
         create_webhook(current_user.id, url, event_types=event_types_raw, secret=secret)

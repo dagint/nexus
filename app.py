@@ -103,11 +103,12 @@ def _metrics_before():
 def set_security_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
-    # NOTE: 'unsafe-inline' is required in script-src because templates use
-    # inline event handlers (onclick, onsubmit).  To remove it, migrate all
-    # inline handlers to addEventListener in external JS files, then switch to
-    # a nonce-based CSP.  'unsafe-inline' in style-src is kept for Bootstrap
-    # components that inject inline styles.
+    # NOTE: Inline event handlers (onclick, onsubmit, oninput) have been migrated
+    # to addEventListener in app.js.  'unsafe-inline' in script-src is still
+    # needed for inline <script> blocks in templates (theme init, page-specific
+    # JS).  To fully remove it, extract remaining inline scripts to external
+    # files and switch to nonce-based CSP.  'unsafe-inline' in style-src is
+    # kept for Bootstrap components that inject inline styles.
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "style-src 'self' 'unsafe-inline'; "

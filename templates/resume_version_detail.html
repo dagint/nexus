@@ -31,7 +31,7 @@
 
 <form method="POST" action="{{ url_for('resumes.restore_resume_version', rid=resume.id, vid=version.id) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button type="submit" class="btn btn-warning" onclick="return confirm('Restore this version as current?')">
+    <button type="submit" class="btn btn-warning" data-confirm="Restore this version as current?">
         Restore This Version
     </button>
 </form>
