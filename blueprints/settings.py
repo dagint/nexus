@@ -71,6 +71,10 @@ def save_settings():
         blocked_locations=request.form.get("blocked_locations", ""),
         scoring_weights=scoring_weights,
         weekly_report_enabled=weekly_report,
+        home_address=request.form.get("home_address", ""),
+        commute_mode=request.form.get("commute_mode", "drive"),
+        max_distance_miles=min(_safe_int(request.form.get("max_distance_miles"), 50), 999),
+        preferred_zips=request.form.get("preferred_zips", ""),
     )
     flash("Settings saved.", "success")
     return redirect(url_for("settings.settings"))

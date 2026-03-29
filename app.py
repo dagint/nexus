@@ -26,6 +26,7 @@ from database import (
     get_bookmarked_job_keys, get_bookmarked_jobs,
     get_unread_count,
     get_api_usage_summary, get_api_usage_daily, get_api_usage_recent,
+    get_api_health_summary, get_api_error_breakdown,
     get_search_templates, create_search_template, delete_search_template,
     get_all_interview_preps, get_interview_prep_by_id, delete_interview_prep,
     get_user_due_follow_ups,
@@ -287,7 +288,7 @@ def usage():
     days = _safe_int(request.args.get("days"), 30)
     summary = get_api_usage_summary(user_id=current_user.id, days=days)
     daily = get_api_usage_daily(user_id=current_user.id, days=days)
-    recent = get_api_usage_recent(user_id=current_user.id, days=days, limit=50)
+    recent, _ = get_api_usage_recent(user_id=current_user.id, days=days, limit=50)
     total_cost = sum(s["total_cost"] or 0 for s in summary)
     total_calls = sum(s["call_count"] for s in summary)
 
@@ -296,6 +297,70 @@ def usage():
         summary=summary, daily=daily, recent=recent,
         total_cost=total_cost, total_calls=total_calls,
         days=days,
+    )
+
+
+# --- API Health ---
+
+@app.route("/api-health")
+@login_required
+def api_health():
+    days = _safe_int(request.args.get("days"), 7)
+    page = max(1, _safe_int(request.args.get("page"), 1))
+    provider_filter = request.args.get("provider", "")
+    status_filter = request.args.get("status", "")
+    per_page = 50
+
+    health = get_api_health_summary(days=days)
+
+    # Get all providers for "not configured" detection
+    from services.apis.registry import get_all_providers
+    all_providers = get_all_providers()
+    provider_status = {}
+    for p in all_providers:
+        provider_status[p.name] = {"available": p.is_available()}
+
+    # Merge health data with provider config status
+    health_names = {h["provider"] for h in health}
+    for p in all_providers:
+        if p.name not in health_names:
+            health.append({
+                "provider": p.name,
+                "total_calls": 0, "success_count": 0, "error_count": 0,
+                "avg_response_ms": None, "max_response_ms": None, "min_response_ms": None,
+                "avg_results": None, "last_call_at": None,
+                "last_status_code": None, "last_response_ms": None,
+                "last_success": None, "last_error": None, "last_results_count": None,
+            })
+    # Add config status to each row
+    for h in health:
+        h["configured"] = provider_status.get(h["provider"], {}).get("available", False)
+        if h["total_calls"] > 0:
+            h["success_rate"] = round(100 * h["success_count"] / h["total_calls"], 1)
+        else:
+            h["success_rate"] = None
+
+    health.sort(key=lambda h: (not h["configured"], h["provider"]))
+
+    # Paginated recent calls log
+    recent, total_recent = get_api_usage_recent(
+        days=days, limit=per_page, offset=(page - 1) * per_page,
+        provider_filter=provider_filter or None,
+        status_filter=status_filter or None,
+    )
+    total_pages = max(1, (total_recent + per_page - 1) // per_page)
+
+    # Error breakdown per provider (if filtering by provider)
+    error_breakdown = []
+    if provider_filter:
+        error_breakdown = get_api_error_breakdown(provider_filter, days=days)
+
+    return render_template(
+        "api_health.html",
+        health=health, recent=recent, days=days,
+        page=page, total_pages=total_pages, total_recent=total_recent,
+        provider_filter=provider_filter, status_filter=status_filter,
+        error_breakdown=error_breakdown,
     )
 
 

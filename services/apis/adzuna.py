@@ -35,6 +35,7 @@ class AdzunaProvider(JobAPIProvider):
             f"https://api.adzuna.com/v1/api/jobs/us/search/{page}",
             params=params, timeout=15,
         )
+        self._track_response(resp)
         if resp.status_code in (429, 500, 503):
             raise APIError(f"Adzuna returned {resp.status_code}")
         resp.raise_for_status()

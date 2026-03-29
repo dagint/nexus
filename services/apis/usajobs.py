@@ -49,6 +49,7 @@ class USAJobsProvider(JobAPIProvider):
             params=params,
             timeout=10,
         )
+        self._track_response(resp)
         resp.raise_for_status()
         data = resp.json()
 

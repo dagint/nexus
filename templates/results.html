@@ -67,6 +67,29 @@
                 </div>
 
                 <hr>
+                <h6 class="small text-muted">Employment Type</h6>
+                <div class="form-check mb-1">
+                    <input type="checkbox" class="form-check-input employment-type-check" id="typeFulltime" data-etype="fulltime" checked>
+                    <label class="form-check-label small" for="typeFulltime">Full-time</label>
+                </div>
+                <div class="form-check mb-1">
+                    <input type="checkbox" class="form-check-input employment-type-check" id="typeContract" data-etype="contract" checked>
+                    <label class="form-check-label small" for="typeContract">Contract</label>
+                </div>
+                <div class="form-check mb-1">
+                    <input type="checkbox" class="form-check-input employment-type-check" id="typeParttime" data-etype="parttime" checked>
+                    <label class="form-check-label small" for="typeParttime">Part-time</label>
+                </div>
+                <div class="form-check mb-1">
+                    <input type="checkbox" class="form-check-input employment-type-check" id="typeInternship" data-etype="internship" checked>
+                    <label class="form-check-label small" for="typeInternship">Internship</label>
+                </div>
+                <div class="form-check mb-1">
+                    <input type="checkbox" class="form-check-input employment-type-check" id="typeUnknown" data-etype="unknown" checked>
+                    <label class="form-check-label small" for="typeUnknown">Unknown</label>
+                </div>
+
+                <hr>
                 <h6 class="small text-muted">Sources</h6>
                 {% for source in sources %}
                 <div class="form-check mb-1">

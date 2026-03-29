@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+
+{% block title %}API Health - Nexus{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="mb-1">API Health Dashboard</h3>
+        <p class="text-muted mb-0">Provider status, response times, and error tracking</p>
+    </div>
+    <div class="d-flex gap-2 align-items-center">
+        <small class="text-muted">Time range:</small>
+        {% for d in [1, 7, 14, 30] %}
+        <a href="{{ url_for('api_health', days=d) }}"
+           class="btn btn-sm {{ 'btn-primary' if days == d else 'btn-outline-secondary' }}">{{ d }}d</a>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Provider Health Cards -->
+<div class="row g-3 mb-4">
+    {% for h in health %}
+    <div class="col-md-6 col-xl-4">
+        <div class="card h-100 {{ 'border-danger' if h.configured and h.last_success == 0 else 'border-success' if h.configured and h.last_success == 1 else 'border-secondary' if not h.configured else '' }}">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <h6 class="card-title mb-0 fw-bold">{{ h.provider }}</h6>
+                    {% if not h.configured %}
+                    <span class="badge bg-secondary">Not Configured</span>
+                    {% elif h.total_calls == 0 %}
+                    <span class="badge bg-warning text-dark">No Data</span>
+                    {% elif h.last_success == 1 %}
+                    <span class="badge bg-success">Healthy</span>
+                    {% else %}
+                    <span class="badge bg-danger">Last Call Failed</span>
+                    {% endif %}
+                </div>
+
+                {% if h.configured and h.total_calls > 0 %}
+                <!-- Success Rate Bar -->
+                <div class="mb-2">
+                    <div class="d-flex justify-content-between small text-muted mb-1">
+                        <span>Success Rate</span>
+                        <span class="{{ 'text-success' if h.success_rate >= 90 else 'text-warning' if h.success_rate >= 50 else 'text-danger' }}">
+                            {{ h.success_rate }}%
+                        </span>
+                    </div>
+                    <div class="progress" style="height: 6px;">
+                        <div class="progress-bar {{ 'bg-success' if h.success_rate >= 90 else 'bg-warning' if h.success_rate >= 50 else 'bg-danger' }}"
+                             style="width: {{ h.success_rate }}%"></div>
+                    </div>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="row g-2 small">
+                    <div class="col-6">
+                        <div class="text-muted">Total Calls</div>
+                        <div class="fw-medium">{{ h.total_calls }}
+                            {% if h.error_count > 0 %}
+                            <span class="text-danger">({{ h.error_count }} errors)</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-muted">Avg Results</div>
+                        <div class="fw-medium">{{ h.avg_results if h.avg_results is not none else '-' }}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-muted">Avg Response</div>
+                        <div class="fw-medium">{{ h.avg_response_ms|int if h.avg_response_ms else '-' }}ms</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-muted">Min / Max</div>
+                        <div class="fw-medium">{{ h.min_response_ms or '-' }} / {{ h.max_response_ms or '-' }}ms</div>
+                    </div>
+                </div>
+
+                <!-- Last Call Info -->
+                <hr class="my-2">
+                <div class="small">
+                    <div class="d-flex justify-content-between">
+                        <span class="text-muted">Last Call</span>
+                        <span>{{ h.last_call_at[:16] if h.last_call_at else 'Never' }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-muted">Status Code</span>
+                        <span>
+                            {% if h.last_status_code %}
+                            <span class="badge {{ 'bg-success' if h.last_status_code == 200 else 'bg-warning text-dark' if h.last_status_code == 429 else 'bg-danger' }}">
+                                {{ h.last_status_code }}
+                            </span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-muted">Response Time</span>
+                        <span>{{ h.last_response_ms or '-' }}ms</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-muted">Results</span>
+                        <span>{{ h.last_results_count if h.last_results_count is not none else '-' }}</span>
+                    </div>
+                    {% if h.last_error %}
+                    <div class="mt-1">
+                        <span class="text-danger small" title="{{ h.last_error }}">
+                            Error: {{ h.last_error[:80] }}{{ '...' if h.last_error|length > 80 }}
+                        </span>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Link to filter logs -->
+                <div class="mt-2">
+                    <a href="{{ url_for('api_health', days=days, provider=h.provider) }}"
+                       class="btn btn-sm btn-outline-primary">View Logs</a>
+                    {% if h.error_count > 0 %}
+                    <a href="{{ url_for('api_health', days=days, provider=h.provider, status='errors') }}"
+                       class="btn btn-sm btn-outline-danger">View Errors</a>
+                    {% endif %}
+                </div>
+                {% elif h.configured %}
+                <p class="text-muted small mb-0">No API calls recorded in the last {{ days }} days.</p>
+                {% else %}
+                <p class="text-muted small mb-0">API key not configured. Check your environment variables.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Error Breakdown (when filtering by provider) -->
+{% if error_breakdown %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h6 class="mb-0">Error Breakdown: {{ provider_filter }}</h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-striped mb-0">
+                <thead>
+                    <tr>
+                        <th>Error Message</th>
+                        <th>HTTP Status</th>
+                        <th>Count</th>
+                        <th>Last Seen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for err in error_breakdown %}
+                    <tr>
+                        <td class="small text-break" style="max-width: 400px;">{{ err.error_message or 'Unknown' }}</td>
+                        <td>
+                            {% if err.status_code %}
+                            <span class="badge {{ 'bg-warning text-dark' if err.status_code == 429 else 'bg-danger' }}">{{ err.status_code }}</span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ err.count }}</td>
+                        <td class="small">{{ err.last_seen[:16] if err.last_seen else '-' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Recent API Calls Log (Paginated) -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="mb-0">
+            Recent API Calls
+            {% if provider_filter %}
+            <span class="badge bg-primary ms-1">{{ provider_filter }}</span>
+            <a href="{{ url_for('api_health', days=days) }}" class="btn btn-sm btn-outline-secondary ms-2">Clear Filter</a>
+            {% endif %}
+            {% if status_filter %}
+            <span class="badge {{ 'bg-danger' if status_filter == 'errors' else 'bg-success' }} ms-1">{{ status_filter }}</span>
+            {% endif %}
+        </h6>
+        <span class="text-muted small">{{ total_recent }} total records</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Provider</th>
+                        <th>HTTP Status</th>
+                        <th>Response Time</th>
+                        <th>Results</th>
+                        <th>Status</th>
+                        <th>Error</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in recent %}
+                    <tr class="{{ 'table-danger' if row.success == 0 else '' }}">
+                        <td class="small text-nowrap">{{ row.created_at[:19] }}</td>
+                        <td>
+                            <a href="{{ url_for('api_health', days=days, provider=row.provider) }}"
+                               class="badge bg-light text-dark border text-decoration-none">{{ row.provider }}</a>
+                        </td>
+                        <td>
+                            {% if row.status_code %}
+                            <span class="badge {{ 'bg-success' if row.status_code == 200 else 'bg-warning text-dark' if row.status_code == 429 else 'bg-danger' }}">
+                                {{ row.status_code }}
+                            </span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ row.response_time_ms }}ms</td>
+                        <td>{{ row.results_count if row.results_count is not none else '-' }}</td>
+                        <td>
+                            {% if row.success %}
+                            <span class="badge bg-success">OK</span>
+                            {% else %}
+                            <span class="badge bg-danger">Error</span>
+                            {% endif %}
+                        </td>
+                        <td class="small text-break" style="max-width: 300px;">
+                            {% if row.error_message %}
+                            <span class="text-danger" title="{{ row.error_message }}">
+                                {{ row.error_message[:100] }}{{ '...' if row.error_message|length > 100 }}
+                            </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if not recent %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-3">No API calls recorded</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div class="card-footer">
+        <nav>
+            <ul class="pagination pagination-sm justify-content-center mb-0">
+                <li class="page-item {{ 'disabled' if page <= 1 }}">
+                    <a class="page-link" href="{{ url_for('api_health', days=days, page=page-1, provider=provider_filter, status=status_filter) }}">Previous</a>
+                </li>
+                {% for p in range(1, total_pages + 1) %}
+                {% if p == page or (p >= page - 2 and p <= page + 2) or p == 1 or p == total_pages %}
+                <li class="page-item {{ 'active' if p == page }}">
+                    <a class="page-link" href="{{ url_for('api_health', days=days, page=p, provider=provider_filter, status=status_filter) }}">{{ p }}</a>
+                </li>
+                {% elif p == page - 3 or p == page + 3 %}
+                <li class="page-item disabled"><span class="page-link">...</span></li>
+                {% endif %}
+                {% endfor %}
+                <li class="page-item {{ 'disabled' if page >= total_pages }}">
+                    <a class="page-link" href="{{ url_for('api_health', days=days, page=page+1, provider=provider_filter, status=status_filter) }}">Next</a>
+                </li>
+            </ul>
+            <p class="text-center text-muted small mt-1 mb-0">Page {{ page }} of {{ total_pages }}</p>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

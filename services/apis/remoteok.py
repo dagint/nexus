@@ -21,6 +21,7 @@ class RemoteOKProvider(JobAPIProvider):
             headers={"User-Agent": "Nexus Job Search"},
             timeout=10,
         )
+        self._track_response(resp)
         resp.raise_for_status()
         data = resp.json()
 

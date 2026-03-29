@@ -18,6 +18,7 @@ class RemotiveProvider(JobAPIProvider):
             params={"search": query, "limit": 20},
             timeout=15,
         )
+        self._track_response(resp)
         resp.raise_for_status()
 
         results = []

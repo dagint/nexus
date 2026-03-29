@@ -201,7 +201,43 @@ def search():
         try:
             from services.commute_checker import check_commute_for_jobs
             max_commute = user_settings.get("max_commute_minutes", 60)
-            jobs = check_commute_for_jobs(jobs, location, max_commute)
+            commute_mode = user_settings.get("commute_mode", "drive")
+            max_distance = user_settings.get("max_distance_miles", 50) or 50
+            # Use home_address as origin if set, otherwise use search location
+            commute_origin = user_settings.get("home_address", "").strip() or location
+            jobs = check_commute_for_jobs(
+                jobs, commute_origin, max_commute,
+                commute_mode=commute_mode, max_distance_miles=max_distance
+            )
+            # Post-filter: exclude non-remote jobs that exceed max distance
+            jobs = [
+                job for job in jobs
+                if job.get("remote_status") == "remote"
+                or not job.get("commute_info")
+                or not job["commute_info"].get("exceeds_distance")
+            ]
+
+            # Flag jobs with unknown location (not remote, no commute info, has location text)
+            for job in jobs:
+                if (job.get("remote_status") in ("unknown", "")
+                        and not job.get("commute_info")
+                        and job.get("location")):
+                    job["location_unverified"] = True
+
+            # Flag preferred area jobs
+            import json as _json
+            pref_zips_raw = user_settings.get("preferred_zips", "")
+            pref_zips = set()
+            if pref_zips_raw:
+                try:
+                    pref_zips = set(_json.loads(pref_zips_raw)) if pref_zips_raw.startswith("[") else set(z.strip() for z in pref_zips_raw.split(",") if z.strip())
+                except (ValueError, TypeError):
+                    pref_zips = set(z.strip() for z in pref_zips_raw.split(",") if z.strip())
+            if pref_zips:
+                for job in jobs:
+                    loc = job.get("location", "")
+                    if any(z in loc for z in pref_zips):
+                        job["preferred_area"] = True
         except Exception as e:
             logger.warning("Commute check failed: %s", e)
 

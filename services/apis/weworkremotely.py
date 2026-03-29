@@ -31,6 +31,7 @@ class WeWorkRemotelyProvider(JobAPIProvider):
                     f"https://weworkremotely.com/categories/{category}.json",
                     timeout=10,
                 )
+                self._track_response(resp)
                 if resp.status_code != 200:
                     continue
                 data = resp.json()

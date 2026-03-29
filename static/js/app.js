@@ -45,7 +45,22 @@ document.addEventListener("DOMContentLoaded", function () {
             } else {
                 full.classList.add("d-none");
                 short.classList.remove("d-none");
-                btn.textContent = "Show more";
+                btn.textContent = "Show full description";
+            }
+        });
+    });
+
+    // --- Toggle job details section ---
+    document.querySelectorAll(".toggle-details-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            var card = btn.closest(".job-card");
+            var details = card.querySelector(".job-details");
+            if (details.classList.contains("d-none")) {
+                details.classList.remove("d-none");
+                btn.textContent = "Hide details";
+            } else {
+                details.classList.add("d-none");
+                btn.textContent = "Show details";
             }
         });
     });
@@ -53,6 +68,7 @@ document.addEventListener("DOMContentLoaded", function () {
     // --- Client-side filtering ---
     const filterChecks = document.querySelectorAll(".filter-check");
     const sourceChecks = document.querySelectorAll(".source-check");
+    const employmentTypeChecks = document.querySelectorAll(".employment-type-check");
 
     function applyFilters() {
         const cards = document.querySelectorAll(".job-card");
@@ -68,6 +84,11 @@ document.addEventListener("DOMContentLoaded", function () {
             if (cb.checked) activeSources.add(cb.dataset.source);
         });
 
+        const activeTypes = new Set();
+        employmentTypeChecks.forEach(function (cb) {
+            if (cb.checked) activeTypes.add(cb.dataset.etype);
+        });
+
         var visibleCount = 0;
         cards.forEach(function (card) {
             let show = true;
@@ -79,12 +100,13 @@ document.addEventListener("DOMContentLoaded", function () {
             if (hideApplied && card.dataset.applied === "yes") show = false;
             if (hideDismissed && card.dataset.dismissed === "yes") show = false;
             if (!activeSources.has(card.dataset.source)) show = false;
+            if (activeTypes.size > 0 && !activeTypes.has(card.dataset.employmentType || "unknown")) show = false;
 
             card.classList.toggle("hidden", !show);
             if (show) visibleCount++;
         });
 
-        var anyFilterActive = remoteOnly || hideTravel || hideStaffing || hideStale || hideApplied || hideDismissed || activeSources.size < sourceChecks.length;
+        var anyFilterActive = remoteOnly || hideTravel || hideStaffing || hideStale || hideApplied || hideDismissed || activeSources.size < sourceChecks.length || activeTypes.size < employmentTypeChecks.length;
         var countEl = document.getElementById("resultsCount");
         if (countEl) {
             var total = countEl.dataset.total;
@@ -100,6 +122,9 @@ document.addEventListener("DOMContentLoaded", function () {
         cb.addEventListener("change", applyFilters);
     });
     sourceChecks.forEach(function (cb) {
+        cb.addEventListener("change", applyFilters);
+    });
+    employmentTypeChecks.forEach(function (cb) {
         cb.addEventListener("change", applyFilters);
     });
 
