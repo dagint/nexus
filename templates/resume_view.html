@@ -44,7 +44,7 @@
     <div class="card-header">
         <div class="d-flex justify-content-between align-items-center">
             <h5 class="mb-0">Resume Content</h5>
-            <button class="btn btn-sm btn-outline-secondary" onclick="copyResume()">Copy Text</button>
+            <button class="btn btn-sm btn-outline-secondary js-copy-resume">Copy Text</button>
         </div>
     </div>
     <div class="card-body">
@@ -53,13 +53,4 @@
 </div>
 {% endblock %}
 
-{% block scripts %}
-<script>
-function copyResume() {
-    var text = document.getElementById('resumeText').innerText;
-    navigator.clipboard.writeText(text).then(function() {
-        alert('Resume text copied to clipboard.');
-    });
-}
-</script>
-{% endblock %}
+{% block scripts %}{% endblock %}

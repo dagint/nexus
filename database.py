@@ -548,7 +548,12 @@ def authenticate_user(email, password):
         "SELECT * FROM users WHERE email = ?", (email.lower().strip(),)
     ).fetchone()
     _safe_close(conn)
-    if row and check_password_hash(row["password_hash"], password):
+    if not row:
+        return None
+    # OAuth-only accounts have no usable password — reject password login
+    if row["password_hash"].startswith("oauth_"):
+        return None
+    if check_password_hash(row["password_hash"], password):
         return dict(row)
     return None
 
@@ -678,15 +683,24 @@ def delete_saved_search(search_id, user_id):
     _safe_close(conn)
 
 
-def toggle_saved_search(search_id, user_id, is_active):
-    """Enable or disable a single alert."""
+def toggle_saved_search(search_id, user_id):
+    """Toggle an alert's is_active state. Returns the new state (bool) or None if not found."""
     conn = get_db()
+    row = conn.execute(
+        "SELECT is_active FROM saved_searches WHERE id = ? AND user_id = ?",
+        (search_id, user_id),
+    ).fetchone()
+    if not row:
+        _safe_close(conn)
+        return None
+    new_state = 0 if row["is_active"] else 1
     conn.execute(
         "UPDATE saved_searches SET is_active = ? WHERE id = ? AND user_id = ?",
-        (int(is_active), search_id, user_id),
+        (new_state, search_id, user_id),
     )
     conn.commit()
     _safe_close(conn)
+    return bool(new_state)
 
 
 def toggle_all_saved_searches(user_id, is_active):
@@ -1327,39 +1341,41 @@ def get_api_usage_recent(user_id=None, days=30, limit=50, offset=0,
 
 
 def get_api_health_summary(days=7):
-    """Per-provider health summary for the API health dashboard."""
+    """Per-provider health summary for the API health dashboard.
+
+    Uses a window function CTE to get last-call details in a single pass
+    instead of 5 correlated subqueries per provider.
+    """
     conn = get_db()
     rows = conn.execute(
-        """SELECT provider,
+        """WITH scoped AS (
+               SELECT * FROM api_usage
+               WHERE endpoint = 'search' AND created_at > datetime('now', ?)
+           ),
+           ranked AS (
+               SELECT provider, status_code, response_time_ms, success,
+                      error_message, results_count,
+                      ROW_NUMBER() OVER (PARTITION BY provider ORDER BY id DESC) AS rn
+               FROM scoped
+           )
+           SELECT s.provider,
                   COUNT(*) as total_calls,
-                  SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as success_count,
-                  SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as error_count,
-                  ROUND(AVG(response_time_ms)) as avg_response_ms,
-                  MAX(response_time_ms) as max_response_ms,
-                  MIN(response_time_ms) as min_response_ms,
-                  ROUND(AVG(CASE WHEN success = 1 THEN results_count END), 1) as avg_results,
-                  MAX(created_at) as last_call_at,
-                  -- Last call details (subquery)
-                  (SELECT status_code FROM api_usage a2
-                   WHERE a2.provider = api_usage.provider
-                   ORDER BY a2.id DESC LIMIT 1) as last_status_code,
-                  (SELECT response_time_ms FROM api_usage a2
-                   WHERE a2.provider = api_usage.provider
-                   ORDER BY a2.id DESC LIMIT 1) as last_response_ms,
-                  (SELECT success FROM api_usage a2
-                   WHERE a2.provider = api_usage.provider
-                   ORDER BY a2.id DESC LIMIT 1) as last_success,
-                  (SELECT error_message FROM api_usage a2
-                   WHERE a2.provider = api_usage.provider
-                   ORDER BY a2.id DESC LIMIT 1) as last_error,
-                  (SELECT results_count FROM api_usage a2
-                   WHERE a2.provider = api_usage.provider
-                   ORDER BY a2.id DESC LIMIT 1) as last_results_count
-           FROM api_usage
-           WHERE endpoint = 'search'
-             AND created_at > datetime('now', ?)
-           GROUP BY provider
-           ORDER BY provider""",
+                  SUM(CASE WHEN s.success = 1 THEN 1 ELSE 0 END) as success_count,
+                  SUM(CASE WHEN s.success = 0 THEN 1 ELSE 0 END) as error_count,
+                  ROUND(AVG(s.response_time_ms)) as avg_response_ms,
+                  MAX(s.response_time_ms) as max_response_ms,
+                  MIN(s.response_time_ms) as min_response_ms,
+                  ROUND(AVG(CASE WHEN s.success = 1 THEN s.results_count END), 1) as avg_results,
+                  MAX(s.created_at) as last_call_at,
+                  r.status_code as last_status_code,
+                  r.response_time_ms as last_response_ms,
+                  r.success as last_success,
+                  r.error_message as last_error,
+                  r.results_count as last_results_count
+           FROM scoped s
+           LEFT JOIN ranked r ON s.provider = r.provider AND r.rn = 1
+           GROUP BY s.provider
+           ORDER BY s.provider""",
         (f"-{days} days",),
     ).fetchall()
     _safe_close(conn)

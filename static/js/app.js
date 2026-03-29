@@ -32,6 +32,43 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+    // --- Confirm dialogs (data-confirm attribute on buttons) ---
+    document.addEventListener("click", function (e) {
+        var btn = e.target.closest("[data-confirm]");
+        if (btn) {
+            if (!confirm(btn.dataset.confirm)) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+            }
+        }
+    });
+
+    // --- Print buttons ---
+    document.querySelectorAll(".js-print").forEach(function (btn) {
+        btn.addEventListener("click", function () { window.print(); });
+    });
+
+    // --- Copy resume text ---
+    var copyResumeBtn = document.querySelector(".js-copy-resume");
+    if (copyResumeBtn) {
+        copyResumeBtn.addEventListener("click", function () {
+            var el = document.getElementById("resumeText");
+            if (el) {
+                navigator.clipboard.writeText(el.innerText).then(function () {
+                    alert("Resume text copied to clipboard.");
+                });
+            }
+        });
+    }
+
+    // --- Range slider value display (data-display attribute) ---
+    document.querySelectorAll("input[type=range][data-display]").forEach(function (slider) {
+        slider.addEventListener("input", function () {
+            var target = document.getElementById(slider.dataset.display);
+            if (target) target.textContent = slider.value;
+        });
+    });
+
     // --- Expand/collapse job descriptions ---
     document.querySelectorAll(".expand-desc-btn").forEach(function (btn) {
         btn.addEventListener("click", function () {

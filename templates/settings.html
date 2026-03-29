@@ -152,7 +152,7 @@
                         </label>
                         <input type="range" class="form-range" id="weight_skills" name="weight_skills"
                                min="0" max="100" value="{{ scoring_weights.skills }}"
-                               oninput="document.getElementById('weight_skills_val').textContent = this.value">
+                               data-display="weight_skills_val">
                     </div>
 
                     <div class="mb-3">
@@ -162,7 +162,7 @@
                         </label>
                         <input type="range" class="form-range" id="weight_location" name="weight_location"
                                min="0" max="100" value="{{ scoring_weights.location }}"
-                               oninput="document.getElementById('weight_location_val').textContent = this.value">
+                               data-display="weight_location_val">
                     </div>
 
                     <div class="mb-3">
@@ -172,7 +172,7 @@
                         </label>
                         <input type="range" class="form-range" id="weight_salary" name="weight_salary"
                                min="0" max="100" value="{{ scoring_weights.salary }}"
-                               oninput="document.getElementById('weight_salary_val').textContent = this.value">
+                               data-display="weight_salary_val">
                     </div>
 
                     <div class="mb-3">
@@ -182,7 +182,7 @@
                         </label>
                         <input type="range" class="form-range" id="weight_experience" name="weight_experience"
                                min="0" max="100" value="{{ scoring_weights.experience }}"
-                               oninput="document.getElementById('weight_experience_val').textContent = this.value">
+                               data-display="weight_experience_val">
                     </div>
 
                     <div class="mb-3">
@@ -192,7 +192,7 @@
                         </label>
                         <input type="range" class="form-range" id="weight_remote" name="weight_remote"
                                min="0" max="100" value="{{ scoring_weights.remote }}"
-                               oninput="document.getElementById('weight_remote_val').textContent = this.value">
+                               data-display="weight_remote_val">
                     </div>
                 </div>
             </div>
@@ -247,7 +247,7 @@
                                 <form method="POST" action="{{ url_for('settings.delete_api_token_route', tid=token.id) }}" class="d-inline">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <button type="submit" class="btn btn-sm btn-outline-danger"
-                                            onclick="return confirm('Revoke this token?')">Revoke</button>
+                                            data-confirm="Revoke this token?">Revoke</button>
                                 </form>
                             </td>
                         </tr>

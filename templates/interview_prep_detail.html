@@ -12,7 +12,7 @@
                 <small class="text-muted">Saved {{ prep.created_at[:10] if prep.created_at else '' }} | Updated {{ prep.updated_at[:10] if prep.updated_at else '' }}</small>
             </div>
             <div class="d-flex gap-2">
-                <button class="btn btn-outline-secondary" onclick="window.print()">Print</button>
+                <button class="btn btn-outline-secondary js-print">Print</button>
                 <a href="{{ url_for('interview_prep_list') }}" class="btn btn-outline-primary">Back to List</a>
             </div>
         </div>
@@ -119,9 +119,9 @@
 
         <div class="text-center mb-4">
             <form method="POST" action="{{ url_for('interview_prep_delete', pid=prep.id) }}" class="d-inline"
-                  onsubmit="return confirm('Delete this interview prep?');">
+                  >
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn btn-outline-danger">Delete This Prep</button>
+                <button type="submit" class="btn btn-outline-danger" data-confirm="Delete this interview prep?">Delete This Prep</button>
             </form>
         </div>
     </div>

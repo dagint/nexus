@@ -30,9 +30,9 @@
                 <td>
                     <a href="{{ url_for('interview_prep_detail', pid=prep.id) }}" class="btn btn-sm btn-outline-primary">View</a>
                     <form method="POST" action="{{ url_for('interview_prep_delete', pid=prep.id) }}" class="d-inline"
-                          onsubmit="return confirm('Delete this interview prep?');">
+                          >
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                        <button type="submit" class="btn btn-sm btn-outline-danger" data-confirm="Delete this interview prep?">Delete</button>
                     </form>
                 </td>
             </tr>

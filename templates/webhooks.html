@@ -78,7 +78,7 @@
                             <form method="POST" action="{{ url_for('settings.webhook_delete', wid=wh.id) }}" class="d-inline">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn-sm btn-outline-danger"
-                                        onclick="return confirm('Delete this webhook?')">Delete</button>
+                                        data-confirm="Delete this webhook?">Delete</button>
                             </form>
                         </div>
                     </div>

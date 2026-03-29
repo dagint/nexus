@@ -41,7 +41,7 @@
                             <form method="POST" action="{{ url_for('teams.team_leave', tid=team.id) }}" class="d-inline">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn-sm btn-outline-danger"
-                                        onclick="return confirm('Leave this team?')">Leave</button>
+                                        data-confirm="Leave this team?">Leave</button>
                             </form>
                         </div>
                     </div>
