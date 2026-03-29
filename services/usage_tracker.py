@@ -33,7 +33,8 @@ def estimate_search_cost(provider):
 
 def _log_to_db(user_id, provider, endpoint, model=None,
                tokens_input=0, tokens_output=0, estimated_cost_usd=0.0,
-               response_time_ms=0, success=True, error_message=None):
+               response_time_ms=0, success=True, error_message=None,
+               status_code=None, results_count=None):
     """Log an API call to the database, swallowing errors."""
     try:
         from database import log_api_usage
@@ -42,6 +43,7 @@ def _log_to_db(user_id, provider, endpoint, model=None,
             model=model, tokens_input=tokens_input, tokens_output=tokens_output,
             estimated_cost_usd=estimated_cost_usd, response_time_ms=response_time_ms,
             success=1 if success else 0, error_message=error_message,
+            status_code=status_code, results_count=results_count,
         )
     except Exception as e:
         logger.warning("Failed to log API usage: %s", e)
@@ -60,11 +62,13 @@ def log_ai_call(endpoint, model, input_tokens, output_tokens, response_time_ms,
     )
 
 
-def log_search_call(provider, response_time_ms, success=True, error_message=None, user_id=None):
+def log_search_call(provider, response_time_ms, success=True, error_message=None,
+                    user_id=None, status_code=None, results_count=None):
     """Log a job search API call."""
     cost = estimate_search_cost(provider)
     _log_to_db(
         user_id=user_id, provider=provider, endpoint="search",
         estimated_cost_usd=cost, response_time_ms=response_time_ms,
         success=success, error_message=error_message,
+        status_code=status_code, results_count=results_count,
     )

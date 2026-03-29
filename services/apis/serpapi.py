@@ -59,6 +59,7 @@ class SerpApiProvider(JobAPIProvider):
             "https://serpapi.com/search",
             params=params, timeout=15,
         )
+        self._track_response(resp)
         if resp.status_code in (429, 500, 503):
             raise APIError(f"SerpApi returned {resp.status_code}")
         resp.raise_for_status()

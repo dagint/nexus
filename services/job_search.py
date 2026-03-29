@@ -75,30 +75,38 @@ def search_all(query, location, remote_only=False, date_posted="month", page=1, 
     all_results = []
     submit_time = time.time()
     futures = {}
+    provider_map = {}  # future -> provider instance (for status code tracking)
     for provider in providers:
         future = _executor.submit(
             provider.search, query, location, remote_only, date_posted, page, employment_type,
         )
         futures[future] = provider.name
+        provider_map[future] = provider
 
     from services.usage_tracker import log_search_call
 
     for future in as_completed(futures):
         source = futures[future]
+        prov = provider_map[future]
         try:
             results = future.result()
             elapsed_ms = int((time.time() - submit_time) * 1000)
             logger.info("API %s returned %d results in %dms", source, len(results), elapsed_ms)
             all_results.extend(results)
             try:
-                log_search_call(source, elapsed_ms, success=True)
+                log_search_call(source, elapsed_ms, success=True,
+                                status_code=prov._last_status_code,
+                                results_count=len(results))
             except Exception:
                 pass
         except Exception as e:
             elapsed_ms = int((time.time() - submit_time) * 1000)
             logger.error("API %s failed: %s", source, e)
             try:
-                log_search_call(source, elapsed_ms, success=False, error_message=str(e)[:200])
+                log_search_call(source, elapsed_ms, success=False,
+                                error_message=str(e)[:200],
+                                status_code=prov._last_status_code,
+                                results_count=0)
             except Exception:
                 pass
 
@@ -145,6 +153,7 @@ def search_and_process(query, location, remote_only=False, date_posted="month", 
     from services.deduplicator import deduplicate_cross_source, flag_staleness, flag_staffing_agencies
     from services.salary_normalizer import normalize_salary
     from services.company_enricher import enrich_jobs
+    from services.description_cleaner import clean_description
 
     jobs = search_all(query, location, remote_only, date_posted, page, employment_type)
 
@@ -157,9 +166,12 @@ def search_and_process(query, location, remote_only=False, date_posted="month", 
         job["salary_annual_min"] = salary_info.get("salary_annual_min")
         job["salary_annual_max"] = salary_info.get("salary_annual_max")
         job["salary_period"] = salary_info.get("salary_period", "annual")
+        job["salary_uncertain"] = salary_info.get("salary_uncertain", False)
         if not job.get("salary_min") and salary_info.get("salary_min"):
             job["salary_min"] = salary_info["salary_min"]
             job["salary_max"] = salary_info.get("salary_max")
+        # Clean description for display
+        job["description"] = clean_description(job.get("description", ""))
 
     jobs = deduplicate_cross_source(jobs)
     jobs = flag_staleness(jobs)

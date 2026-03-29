@@ -23,23 +23,36 @@ def normalize_salary(salary_min=None, salary_max=None, description=""):
         "salary_period": "annual",
         "salary_annual_min": None,
         "salary_annual_max": None,
+        "salary_uncertain": False,
     }
 
     # If we have values, try to detect period and normalize
     if salary_min or salary_max:
         period = _detect_period_from_values(salary_min, salary_max, description)
+        if period == "uncertain":
+            result["salary_uncertain"] = True
+            result["salary_period"] = "annual"
+            return result
         result["salary_period"] = period
         multiplier = PERIOD_MULTIPLIERS.get(period, 1)
         if salary_min:
             result["salary_annual_min"] = round(salary_min * multiplier)
         if salary_max:
             result["salary_annual_max"] = round(salary_max * multiplier)
+        # Sanity check: flag obviously wrong annualized values
+        result["salary_uncertain"] = _is_salary_suspect(
+            result["salary_annual_min"], result["salary_annual_max"]
+        )
         return result
 
     # Try to extract from description
     extracted = _extract_salary_from_text(description)
     if extracted:
         result.update(extracted)
+        if "salary_uncertain" not in extracted:
+            result["salary_uncertain"] = _is_salary_suspect(
+                result.get("salary_annual_min"), result.get("salary_annual_max")
+            )
 
     return result
 
@@ -48,10 +61,13 @@ def _detect_period_from_values(salary_min, salary_max, description=""):
     """Guess salary period from the values and context."""
     val = salary_max or salary_min or 0
 
-    # Check description for explicit period
+    # Check description for explicit period hints (these override the heuristic)
     desc_lower = description.lower()
     if any(p in desc_lower for p in ["/hr", "/hour", "per hour", "hourly rate"]):
         return "hourly"
+    if any(p in desc_lower for p in ["/yr", "/year", "per year", "per annum",
+                                      "annual", "annually"]):
+        return "annual"
     if any(p in desc_lower for p in ["/month", "per month", "monthly"]):
         return "monthly"
     if any(p in desc_lower for p in ["/week", "per week", "weekly"]):
@@ -62,12 +78,23 @@ def _detect_period_from_values(salary_min, salary_max, description=""):
     # Heuristic from value ranges
     if val < 200:  # Likely hourly
         return "hourly"
-    if 200 <= val < 1000:  # Likely daily
+    if 200 <= val < 500:  # Ambiguous range without description context
+        return "uncertain"
+    if 500 <= val < 1000:  # Likely daily
         return "daily"
     if 1000 <= val < 10000:  # Likely monthly or bi-weekly
         return "monthly"
     # >= 10000 assume annual
     return "annual"
+
+
+def _is_salary_suspect(annual_min, annual_max):
+    """Flag annualized values that look obviously wrong."""
+    for val in [annual_min, annual_max]:
+        if val is not None:
+            if val > 1_000_000 or (val > 0 and val < 15_000):
+                return True
+    return False
 
 
 def _extract_salary_from_text(text):

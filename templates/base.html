@@ -38,7 +38,7 @@
                         <button id="themeToggle" class="btn btn-sm btn-outline-light" type="button">Dark</button>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/">Search</a>
+                        <a class="nav-link{% if request.path in ['/', '/search'] %} active{% endif %}" href="/">Search</a>
                     </li>
                     {% if current_user.is_authenticated %}
                     <li class="nav-item dropdown d-flex align-items-center">
@@ -64,20 +64,39 @@
                         </ul>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/dashboard">Dashboard</a>
+                        <a class="nav-link{% if request.path == '/dashboard' %} active{% endif %}" href="/dashboard">Dashboard</a>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Manage</a>
+                        <a class="nav-link dropdown-toggle{% if request.path in ['/pipeline', '/kanban', '/bookmarks', '/calendar'] %} active{% endif %}" href="#" data-bs-toggle="dropdown">Jobs</a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item" href="/pipeline">Pipeline</a></li>
                             <li><a class="dropdown-item" href="/kanban">Kanban Board</a></li>
                             <li><a class="dropdown-item" href="/bookmarks">Bookmarks</a></li>
                             <li><a class="dropdown-item" href="/calendar">Calendar</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle{% if request.path in ['/analytics', '/salary-insights', '/usage', '/api-health', '/history'] %} active{% endif %}" href="#" data-bs-toggle="dropdown">Insights</a>
+                        <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item" href="/analytics">Analytics</a></li>
                             <li><a class="dropdown-item" href="/salary-insights">Salary Insights</a></li>
                             <li><a class="dropdown-item" href="/usage">API Usage</a></li>
-                            <li><a class="dropdown-item" href="/resumes">Resumes</a></li>
+                            <li><a class="dropdown-item" href="/api-health">API Health</a></li>
                             <li><a class="dropdown-item" href="/history">Search History</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-person-circle" viewBox="0 0 16 16">
+                                <path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
+                                <path fill-rule="evenodd" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1z"/>
+                            </svg>
+                            <span class="d-lg-none ms-1">{{ current_user.name or current_user.email }}</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><span class="dropdown-item-text small text-muted">{{ current_user.name or current_user.email }}</span></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="/resumes">Resumes</a></li>
                             <li><a class="dropdown-item" href="/alerts">Alerts</a></li>
                             <li><a class="dropdown-item" href="/interview-prep">Interview Prep</a></li>
                             <li><a class="dropdown-item" href="/jobs/import-email">Import from Email</a></li>
@@ -89,13 +108,9 @@
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="/admin">Admin</a></li>
                             {% endif %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="/logout">Log Out</a></li>
                         </ul>
-                    </li>
-                    <li class="nav-item">
-                        <span class="nav-link text-light opacity-75 small">{{ current_user.name or current_user.email }}</span>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/logout">Log Out</a>
                     </li>
                     {% else %}
                     <li class="nav-item">

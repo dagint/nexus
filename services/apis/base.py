@@ -13,11 +13,21 @@ import hashlib
 import logging
 from abc import ABC, abstractmethod
 
+from services.employment_type_inferrer import infer_employment_type
+
 logger = logging.getLogger(__name__)
 
 
 class JobAPIProvider(ABC):
     """Base class all job API providers must implement."""
+
+    def __init__(self):
+        self._last_status_code = None
+
+    def _track_response(self, response):
+        """Record the HTTP status code from a requests.Response object.
+        Call this right after a successful HTTP request in each provider."""
+        self._last_status_code = response.status_code
 
     @property
     @abstractmethod
@@ -43,6 +53,12 @@ class JobAPIProvider(ABC):
         """Convert raw API data into the standard job schema."""
         title = raw.get("title", "Unknown Title")
         company = raw.get("company", "Unknown Company")
+        employment_type = raw.get("employment_type", "")
+        # Infer employment type from text when the API doesn't provide it
+        if not employment_type:
+            employment_type = infer_employment_type(
+                title, raw.get("description", "")
+            )
         return {
             "title": title,
             "company": company,
@@ -53,7 +69,7 @@ class JobAPIProvider(ABC):
             "salary_min": raw.get("salary_min"),
             "salary_max": raw.get("salary_max"),
             "posted_date": raw.get("posted_date", ""),
-            "employment_type": raw.get("employment_type", ""),
+            "employment_type": employment_type,
             "source": self.name,
             "job_key": self._make_key(title, company),
         }

@@ -466,6 +466,12 @@ def init_db():
     _migrate_add_column(conn, "search_history", "avg_salary", "REAL")
     _migrate_add_column(conn, "applied_jobs", "resume_id", "INTEGER")
     _migrate_add_column(conn, "users", "weekly_report_enabled", "INTEGER DEFAULT 1")
+    _migrate_add_column(conn, "users", "home_address", "TEXT DEFAULT ''")
+    _migrate_add_column(conn, "users", "commute_mode", "TEXT DEFAULT 'drive'")
+    _migrate_add_column(conn, "users", "max_distance_miles", "INTEGER DEFAULT 50")
+    _migrate_add_column(conn, "users", "preferred_zips", "TEXT DEFAULT '[]'")
+    _migrate_add_column(conn, "api_usage", "status_code", "INTEGER")
+    _migrate_add_column(conn, "api_usage", "results_count", "INTEGER")
 
     seed_search_templates(conn)
     bootstrap_admin(conn)
@@ -878,7 +884,7 @@ def cache_company(company_name, data):
 def get_user_settings(user_id):
     conn = get_db()
     row = conn.execute(
-        "SELECT timezone, max_commute_minutes, seniority_tier, blocked_companies, blocked_keywords, blocked_locations, scoring_weights, user_autofill_data, weekly_report_enabled FROM users WHERE id = ?",
+        "SELECT timezone, max_commute_minutes, seniority_tier, blocked_companies, blocked_keywords, blocked_locations, scoring_weights, user_autofill_data, weekly_report_enabled, home_address, commute_mode, max_distance_miles, preferred_zips FROM users WHERE id = ?",
         (user_id,),
     ).fetchone()
     _safe_close(conn)
@@ -887,7 +893,7 @@ def get_user_settings(user_id):
 
 def update_user_settings(user_id, **kwargs):
     conn = get_db()
-    allowed = {"timezone", "max_commute_minutes", "seniority_tier", "blocked_companies", "blocked_keywords", "blocked_locations", "name", "scoring_weights", "user_autofill_data", "weekly_report_enabled"}
+    allowed = {"timezone", "max_commute_minutes", "seniority_tier", "blocked_companies", "blocked_keywords", "blocked_locations", "name", "scoring_weights", "user_autofill_data", "weekly_report_enabled", "home_address", "commute_mode", "max_distance_miles", "preferred_zips"}
     fields = {k: v for k, v in kwargs.items() if k in allowed}
     if not fields:
         return
@@ -1219,15 +1225,18 @@ def get_dismissed_jobs(user_id):
 
 def log_api_usage(user_id, provider, endpoint, model=None,
                   tokens_input=0, tokens_output=0, estimated_cost_usd=0.0,
-                  response_time_ms=0, success=1, error_message=None):
+                  response_time_ms=0, success=1, error_message=None,
+                  status_code=None, results_count=None):
     conn = get_db()
     conn.execute(
         """INSERT INTO api_usage
            (user_id, provider, endpoint, model, tokens_input, tokens_output,
-            estimated_cost_usd, response_time_ms, success, error_message)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            estimated_cost_usd, response_time_ms, success, error_message,
+            status_code, results_count)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (user_id, provider, endpoint, model, tokens_input, tokens_output,
-         estimated_cost_usd, response_time_ms, success, error_message),
+         estimated_cost_usd, response_time_ms, success, error_message,
+         status_code, results_count),
     )
     conn.commit()
     _safe_close(conn)
@@ -1291,15 +1300,84 @@ def get_api_usage_daily(user_id=None, days=30):
     return [dict(r) for r in rows]
 
 
-def get_api_usage_recent(user_id=None, days=30, limit=50):
-    """Recent API calls log."""
+def get_api_usage_recent(user_id=None, days=30, limit=50, offset=0,
+                         provider_filter=None, status_filter=None):
+    """Recent API calls log with pagination and filters."""
     conn = get_db()
     where, params = _usage_where(user_id, days)
-    params.append(limit)
+    if provider_filter:
+        where += " AND provider = ?"
+        params.append(provider_filter)
+    if status_filter == "errors":
+        where += " AND success = 0"
+    elif status_filter == "success":
+        where += " AND success = 1"
+    # Get total count for pagination
+    total = conn.execute(
+        f"SELECT COUNT(*) FROM api_usage {where}", params
+    ).fetchone()[0]
+    params.extend([limit, offset])
     rows = conn.execute(
         f"""SELECT * FROM api_usage {where}
-            ORDER BY created_at DESC LIMIT ?""",
+            ORDER BY created_at DESC LIMIT ? OFFSET ?""",
         params,
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows], total
+
+
+def get_api_health_summary(days=7):
+    """Per-provider health summary for the API health dashboard."""
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT provider,
+                  COUNT(*) as total_calls,
+                  SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as success_count,
+                  SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as error_count,
+                  ROUND(AVG(response_time_ms)) as avg_response_ms,
+                  MAX(response_time_ms) as max_response_ms,
+                  MIN(response_time_ms) as min_response_ms,
+                  ROUND(AVG(CASE WHEN success = 1 THEN results_count END), 1) as avg_results,
+                  MAX(created_at) as last_call_at,
+                  -- Last call details (subquery)
+                  (SELECT status_code FROM api_usage a2
+                   WHERE a2.provider = api_usage.provider
+                   ORDER BY a2.id DESC LIMIT 1) as last_status_code,
+                  (SELECT response_time_ms FROM api_usage a2
+                   WHERE a2.provider = api_usage.provider
+                   ORDER BY a2.id DESC LIMIT 1) as last_response_ms,
+                  (SELECT success FROM api_usage a2
+                   WHERE a2.provider = api_usage.provider
+                   ORDER BY a2.id DESC LIMIT 1) as last_success,
+                  (SELECT error_message FROM api_usage a2
+                   WHERE a2.provider = api_usage.provider
+                   ORDER BY a2.id DESC LIMIT 1) as last_error,
+                  (SELECT results_count FROM api_usage a2
+                   WHERE a2.provider = api_usage.provider
+                   ORDER BY a2.id DESC LIMIT 1) as last_results_count
+           FROM api_usage
+           WHERE endpoint = 'search'
+             AND created_at > datetime('now', ?)
+           GROUP BY provider
+           ORDER BY provider""",
+        (f"-{days} days",),
+    ).fetchall()
+    _safe_close(conn)
+    return [dict(r) for r in rows]
+
+
+def get_api_error_breakdown(provider, days=7):
+    """Get error message breakdown for a specific provider."""
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT error_message, status_code, COUNT(*) as count,
+                  MAX(created_at) as last_seen
+           FROM api_usage
+           WHERE provider = ? AND success = 0
+             AND created_at > datetime('now', ?)
+           GROUP BY error_message, status_code
+           ORDER BY count DESC LIMIT 20""",
+        (provider, f"-{days} days"),
     ).fetchall()
     _safe_close(conn)
     return [dict(r) for r in rows]
